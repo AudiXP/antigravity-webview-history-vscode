@@ -4,6 +4,14 @@ All notable changes to the **Antigravity Webview History & Resume** extension wi
 
 ---
 
+## [0.3.2] - 2026-09-06
+
+### Added
+- 🕒 **Vista de "Recientes" Predeterminada**: Nueva pestaña en el control segmentado (`[Recientes] [Fecha] [Workspace]`), cargada por defecto al abrir la extensión y ordenada por última actividad (`lastUserInputTime`).
+- 📁 **Detección de Workspaces Cruzados**: Si se intenta reanudar una conversación perteneciente a otro directorio, se alerta con opción de abrir dicha carpeta en una nueva ventana.
+
+---
+
 ## [0.3.1] - 2026-09-06
 
 ### Added

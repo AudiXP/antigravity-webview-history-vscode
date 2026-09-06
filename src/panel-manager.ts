@@ -461,7 +461,37 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
     }
   }, 450);
 
-  postMessage({ command: 'toast', text: `Chat reactivado en Antigravity ✅` });
+  // 6. Verificar correspondencia de workspace
+  const conv = cachedConversations[cascadeId];
+  const convWsUri = conv?.workspaces?.[0]?.workspaceFolderAbsoluteUri;
+  const currentWsUris = (vscode.workspace.workspaceFolders || []).map((f) => f.uri.toString());
+
+  let isDifferentWs = false;
+  let targetFolder = '';
+  if (convWsUri) {
+    const normalizedConv = convWsUri.toLowerCase().replace(/\/$/, '');
+    isDifferentWs = !currentWsUris.some((u) => u.toLowerCase().replace(/\/$/, '') === normalizedConv);
+    targetFolder = decodeURIComponent(convWsUri.replace(/^file:\/\/\//i, ''));
+  }
+
+  if (isDifferentWs && targetFolder) {
+    const folderName = path.basename(targetFolder);
+    postMessage({ command: 'toast', text: `Chat reactivado ⚠️ Pertenece a "${folderName}"` });
+    vscode.window.showWarningMessage(
+      `Este chat pertenece al workspace "${folderName}" (${targetFolder}). El Agente de Antigravity solo lista en "Recientes" los chats de la carpeta abierta actualmente. ¿Deseas abrir esa carpeta?`,
+      'Abrir en Nueva Ventana',
+      'Abrir en Esta Ventana',
+    ).then((choice) => {
+      if (choice === 'Abrir en Nueva Ventana') {
+        vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(targetFolder), true);
+      } else if (choice === 'Abrir en Esta Ventana') {
+        vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(targetFolder), false);
+      }
+    });
+  } else {
+    postMessage({ command: 'toast', text: `Chat en la cima de Recientes ✅ Haz clic en él en el panel del Agente` });
+    vscode.window.showInformationMessage(`Conversación ${cascadeId.slice(0, 8)} reactivada en la cima de Recientes. Haz clic sobre ella abajo en el panel del Agente.`);
+  }
 }
 
 function postMessage(msg: Record<string, unknown>, targetWebview?: vscode.Webview): void {
@@ -513,7 +543,8 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
   <div class="top-bar">
     <input type="text" class="search-input" id="search-input" placeholder="Search conversations...">
     <div class="segmented-control">
-      <button class="seg-btn active" id="group-date">Date</button>
+      <button class="seg-btn active" id="group-recent">Recientes</button>
+      <button class="seg-btn" id="group-date">Fecha</button>
       <button class="seg-btn" id="group-workspace">Workspace</button>
     </div>
     <div class="segmented-control">

@@ -13,6 +13,7 @@
   const listContainer = document.getElementById('list-container');
   const toastEl = document.getElementById('toast');
   const exportPathBar = document.getElementById('export-path-bar');
+  const groupRecentBtn = document.getElementById('group-recent');
   const groupDateBtn = document.getElementById('group-date');
   const groupWorkspaceBtn = document.getElementById('group-workspace');
   const expandAllBtn = document.getElementById('btn-expand-all');
@@ -22,7 +23,7 @@
   // ── State ──
   let conversations = {};
   let searchQuery = '';
-  let groupMode = 'date';
+  let groupMode = 'recent';
   let collapsedGroups = new Set();
   let convDataDir = '';
 
@@ -62,10 +63,21 @@
   }
 
   // Segmented control
+  if (groupRecentBtn) {
+    groupRecentBtn.addEventListener('click', () => {
+      groupMode = 'recent';
+      groupRecentBtn.classList.add('active');
+      if (groupDateBtn) { groupDateBtn.classList.remove('active'); }
+      if (groupWorkspaceBtn) { groupWorkspaceBtn.classList.remove('active'); }
+      collapsedGroups.clear();
+      renderList();
+    });
+  }
   if (groupDateBtn) {
     groupDateBtn.addEventListener('click', () => {
       groupMode = 'date';
       groupDateBtn.classList.add('active');
+      if (groupRecentBtn) { groupRecentBtn.classList.remove('active'); }
       if (groupWorkspaceBtn) { groupWorkspaceBtn.classList.remove('active'); }
       collapsedGroups.clear();
       renderList();
@@ -75,6 +87,7 @@
     groupWorkspaceBtn.addEventListener('click', () => {
       groupMode = 'workspace';
       groupWorkspaceBtn.classList.add('active');
+      if (groupRecentBtn) { groupRecentBtn.classList.remove('active'); }
       if (groupDateBtn) { groupDateBtn.classList.remove('active'); }
       collapsedGroups.clear();
       renderList();
@@ -188,7 +201,11 @@
     }
 
     // Group
-    const groups = groupMode === 'workspace' ? groupByWorkspace(filtered) : groupByDate(filtered);
+    const groups = groupMode === 'workspace'
+      ? groupByWorkspace(filtered)
+      : groupMode === 'date'
+        ? groupByDate(filtered)
+        : groupByRecent(filtered);
     statsBar.textContent = `${filtered.length} of ${entries.length} conversations`;
 
     let html = '';
@@ -302,6 +319,46 @@
   }
 
   // ── Grouping ──
+  function groupByRecent(entries) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const thisWeek = new Date(today);
+    thisWeek.setDate(thisWeek.getDate() - 7);
+    const thisMonth = new Date(today);
+    thisMonth.setDate(thisMonth.getDate() - 30);
+
+    const groups = new Map();
+
+    // Sort strictly by most recent timestamp descending
+    entries.sort((a, b) => {
+      const ta = a[1].lastUserInputTime || a[1].lastModifiedTime || a[1].createdTime || '';
+      const tb = b[1].lastUserInputTime || b[1].lastModifiedTime || b[1].createdTime || '';
+      return tb.localeCompare(ta);
+    });
+
+    for (const entry of entries) {
+      const ts = entry[1].lastUserInputTime || entry[1].lastModifiedTime || entry[1].createdTime || '';
+      let label = 'Anteriores';
+      if (ts) {
+        const d = new Date(ts);
+        if (d >= today) {
+          label = 'Hoy';
+        } else if (d >= yesterday) {
+          label = 'Ayer';
+        } else if (d >= thisWeek) {
+          label = 'Esta semana';
+        } else if (d >= thisMonth) {
+          label = 'Este mes';
+        }
+      }
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(entry);
+    }
+    return groups;
+  }
+
   function groupByDate(entries) {
     const now = new Date();
     const todayStr = dateKey(now);
