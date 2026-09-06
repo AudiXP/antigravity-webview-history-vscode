@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { discoverAndListAll, getAllTrajectories, getTrajectorySteps, TrajectorySummary } from './ls-client.js';
 import { recoverUnindexed } from './recovery.js';
 import { readCache, writeCache } from './cache.js';
@@ -74,7 +75,7 @@ export function registerSidebarViewProvider(context: vscode.ExtensionContext): v
       setupWebviewMessageHandler(webviewView.webview, context.subscriptions);
 
       // Load initial cached conversations
-      handleRefresh();
+      handleRefresh(webviewView.webview);
     },
   };
 
@@ -88,7 +89,7 @@ function setupWebviewMessageHandler(webview: vscode.Webview, subscriptions: vsco
     async (message) => {
       switch (message.command) {
         case 'refresh':
-          await handleRefresh();
+          await handleRefresh(webview);
           break;
         case 'resumeChat':
           await handleResumeChat(message.cascadeId);
@@ -142,19 +143,23 @@ function setupWebviewMessageHandler(webview: vscode.Webview, subscriptions: vsco
 
 export function refreshPanel(): void {
   if (currentPanel) {
+    handleRefresh(currentPanel.webview);
+  } else if (currentSidebarView) {
+    handleRefresh(currentSidebarView.webview);
+  } else {
     handleRefresh();
   }
 }
 
 // ── Handlers ──
 
-async function handleRefresh(): Promise<void> {
+async function handleRefresh(targetWebview?: vscode.Webview): Promise<void> {
   try {
     // Step 0: Show cached data instantly (IDE restart scenario)
     const cached = readCache();
     if (Object.keys(cached).length > 0 && Object.keys(cachedConversations).length === 0) {
       cachedConversations = cached;
-      postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() });
+      postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() }, targetWebview);
     }
 
     // Step 1: Discover LS instances and get indexed conversations
@@ -162,13 +167,13 @@ async function handleRefresh(): Promise<void> {
     cachedEndpointMap = result.cascadeToEndpoint;
     cachedConversations = { ...cachedConversations, ...result.conversations };
 
-    postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() });
+    postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() }, targetWebview);
 
     // Send current export path to webview
     const exportDir = resolveExportPath(
       vscode.workspace.getConfiguration('aghistory').get<string>('exportPath', './antigravity_export'),
     );
-    postMessage({ command: 'setExportPath', path: exportDir });
+    postMessage({ command: 'setExportPath', path: exportDir }, targetWebview);
 
     // Step 2: Auto-recover unindexed conversations
     if (result.endpoints.length > 0) {
@@ -178,7 +183,7 @@ async function handleRefresh(): Promise<void> {
       const recovery = await recoverUnindexed(
         indexedIds, epList,
         (done: number, total: number) => {
-          postMessage({ command: 'recoverProgress', done, total });
+          postMessage({ command: 'recoverProgress', done, total }, targetWebview);
         },
       );
 
@@ -187,17 +192,24 @@ async function handleRefresh(): Promise<void> {
         const refreshed = await discoverAndListAll();
         cachedEndpointMap = refreshed.cascadeToEndpoint;
         cachedConversations = { ...cachedConversations, ...refreshed.conversations };
-        postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() });
-        postMessage({ command: 'recoverDone', activated: recovery.activated, total: recovery.total });
+        postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() }, targetWebview);
+        postMessage({ command: 'recoverDone', activated: recovery.activated, total: recovery.total }, targetWebview);
       }
     }
 
-    // Step 4: Detect conversations cleaned by Antigravity (in cache but .pb deleted)
-    const convDir = getConvDir();
+    // Step 4: Detect conversations cleaned by Antigravity (in cache but neither in live LS nor on disk)
+    const convDirs = getConvDirs();
     const cleanedIds: string[] = [];
     for (const id of Object.keys(cachedConversations)) {
-      const pbFile = path.join(convDir, `${id}.pb`);
-      if (!fs.existsSync(pbFile)) {
+      // If it's live in LanguageServer, it is NOT cleaned
+      if (result.conversations && result.conversations[id]) {
+        continue;
+      }
+      // Check if .pb or .db exists in any conversations dir
+      const existsOnDisk = convDirs.some(
+        (dir) => fs.existsSync(path.join(dir, `${id}.pb`)) || fs.existsSync(path.join(dir, `${id}.db`)),
+      );
+      if (!existsOnDisk) {
         cleanedIds.push(id);
       }
     }
@@ -207,7 +219,7 @@ async function handleRefresh(): Promise<void> {
         delete cachedConversations[id];
         delete cachedEndpointMap[id];
       }
-      postMessage({ command: 'setConversations', data: cachedConversations, convDir });
+      postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() }, targetWebview);
       vscode.window.showWarningMessage(
         `${cleanedIds.length} conversation(s) were auto-cleaned by Antigravity (100-limit). Consider using "Export All" to backup.`,
         'Export All',
@@ -219,7 +231,7 @@ async function handleRefresh(): Promise<void> {
     // Step 5: Persist to disk cache
     writeCache(cachedConversations);
   } catch (e) {
-    postMessage({ command: 'error', text: `Discovery failed: ${e}` });
+    postMessage({ command: 'error', text: `Discovery failed: ${e}` }, targetWebview);
   }
 }
 
@@ -372,7 +384,10 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
   vscode.window.showInformationMessage(`Conversación ${cascadeId.slice(0, 8)} reactivada. Presiona Enter en el selector para abrirla.`);
 }
 
-function postMessage(msg: Record<string, unknown>): void {
+function postMessage(msg: Record<string, unknown>, targetWebview?: vscode.Webview): void {
+  if (targetWebview) {
+    targetWebview.postMessage(msg);
+  }
   currentPanel?.webview.postMessage(msg);
   currentSidebarView?.webview.postMessage(msg);
 }
@@ -383,11 +398,17 @@ function resolveExportPath(configPath: string): string {
   return path.resolve(wsFolder || process.cwd(), configPath);
 }
 
+function getConvDirs(): string[] {
+  const dirs = [
+    path.join(os.homedir(), '.gemini', 'antigravity-ide', 'conversations'),
+    path.join(os.homedir(), '.gemini', 'antigravity', 'conversations'),
+  ];
+  return dirs.filter((d) => fs.existsSync(d));
+}
+
 function getConvDir(): string {
-  const os = require('os');
-  const dir1 = path.join(os.homedir(), '.gemini', 'antigravity-ide', 'conversations');
-  if (fs.existsSync(dir1)) { return dir1; }
-  return path.join(os.homedir(), '.gemini', 'antigravity', 'conversations');
+  const dirs = getConvDirs();
+  return dirs[0] || path.join(os.homedir(), '.gemini', 'antigravity-ide', 'conversations');
 }
 
 function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {

@@ -16,24 +16,34 @@ import * as os from 'os';
 import { callApi } from './ls-client.js';
 
 /**
- * Discover the conversations directory.
+ * Discover the conversations directories (both Antigravity IDE and legacy Antigravity).
  */
-export function getConversationsDir(): string | null {
-  const dir = path.join(os.homedir(), '.gemini', 'antigravity', 'conversations');
-  return fs.existsSync(dir) ? dir : null;
+export function getConversationsDirs(): string[] {
+  const dirs = [
+    path.join(os.homedir(), '.gemini', 'antigravity-ide', 'conversations'),
+    path.join(os.homedir(), '.gemini', 'antigravity', 'conversations'),
+  ];
+  return dirs.filter((d) => fs.existsSync(d));
 }
 
 /**
- * Scan .pb files and return all cascade IDs found on disk.
+ * Scan .pb files across all conversation directories and return unique cascade IDs.
  */
-export function scanPbFiles(convDir: string): string[] {
-  try {
-    return fs.readdirSync(convDir)
-      .filter((f) => f.endsWith('.pb'))
-      .map((f) => f.replace('.pb', ''));
-  } catch {
-    return [];
+export function scanPbFiles(convDirs: string[]): string[] {
+  const allIds = new Set<string>();
+  for (const dir of convDirs) {
+    try {
+      const files = fs.readdirSync(dir);
+      for (const f of files) {
+        if (f.endsWith('.pb')) {
+          allIds.add(f.replace('.pb', ''));
+        }
+      }
+    } catch {
+      // ignore
+    }
   }
+  return Array.from(allIds);
 }
 
 /**
@@ -50,12 +60,12 @@ export async function recoverUnindexed(
   endpoints: Array<{ port: number; csrf: string }>,
   onProgress?: (done: number, total: number, id: string) => void,
 ): Promise<{ activated: number; failed: number; total: number }> {
-  const convDir = getConversationsDir();
-  if (!convDir || endpoints.length === 0) {
+  const convDirs = getConversationsDirs();
+  if (convDirs.length === 0 || endpoints.length === 0) {
     return { activated: 0, failed: 0, total: 0 };
   }
 
-  const allDiskIds = scanPbFiles(convDir);
+  const allDiskIds = scanPbFiles(convDirs);
   const unindexed = allDiskIds.filter((id) => !indexedIds.has(id));
 
   if (unindexed.length === 0) {

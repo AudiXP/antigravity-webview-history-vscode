@@ -26,91 +26,121 @@
   let convDataDir = '';
 
   // ── Init ──
-  refreshBtn.addEventListener('click', () => {
-    vscode.postMessage({ command: 'refresh' });
-    showLoading();
-  });
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      vscode.postMessage({ command: 'refresh' });
+      showLoading();
+    });
+  }
 
-  exportAllBtn.addEventListener('click', () => {
-    vscode.postMessage({ command: 'exportAll' });
-  });
+  if (exportAllBtn) {
+    exportAllBtn.addEventListener('click', () => {
+      vscode.postMessage({ command: 'exportAll' });
+    });
+  }
 
-  fieldLevelSelect.addEventListener('change', () => {
-    vscode.postMessage({ command: 'setFieldLevel', value: fieldLevelSelect.value });
-  });
+  if (fieldLevelSelect) {
+    fieldLevelSelect.addEventListener('change', () => {
+      vscode.postMessage({ command: 'setFieldLevel', value: fieldLevelSelect.value });
+    });
+  }
 
-  searchInput.addEventListener('input', (e) => {
-    searchQuery = e.target.value.toLowerCase();
-    renderList();
-  });
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      searchQuery = e.target.value.toLowerCase();
+      renderList();
+    });
+  }
 
   // Segmented control
-  groupDateBtn.addEventListener('click', () => {
-    groupMode = 'date';
-    groupDateBtn.classList.add('active');
-    groupWorkspaceBtn.classList.remove('active');
-    collapsedGroups.clear();
-    renderList();
-  });
-  groupWorkspaceBtn.addEventListener('click', () => {
-    groupMode = 'workspace';
-    groupWorkspaceBtn.classList.add('active');
-    groupDateBtn.classList.remove('active');
-    collapsedGroups.clear();
-    renderList();
-  });
+  if (groupDateBtn) {
+    groupDateBtn.addEventListener('click', () => {
+      groupMode = 'date';
+      groupDateBtn.classList.add('active');
+      if (groupWorkspaceBtn) { groupWorkspaceBtn.classList.remove('active'); }
+      collapsedGroups.clear();
+      renderList();
+    });
+  }
+  if (groupWorkspaceBtn) {
+    groupWorkspaceBtn.addEventListener('click', () => {
+      groupMode = 'workspace';
+      groupWorkspaceBtn.classList.add('active');
+      if (groupDateBtn) { groupDateBtn.classList.remove('active'); }
+      collapsedGroups.clear();
+      renderList();
+    });
+  }
 
   // Expand / Collapse all
-  expandAllBtn.addEventListener('click', () => { collapsedGroups.clear(); renderList(); });
-  collapseAllBtn.addEventListener('click', () => {
-    listContainer.querySelectorAll('.date-group-header').forEach((h) => {
-      collapsedGroups.add(h.getAttribute('data-group'));
+  if (expandAllBtn) {
+    expandAllBtn.addEventListener('click', () => { collapsedGroups.clear(); renderList(); });
+  }
+  if (collapseAllBtn) {
+    collapseAllBtn.addEventListener('click', () => {
+      listContainer.querySelectorAll('.date-group-header').forEach((h) => {
+        collapsedGroups.add(h.getAttribute('data-group'));
+      });
+      renderList();
     });
-    renderList();
-  });
+  }
 
   // ── Receive messages from extension ──
   window.addEventListener('message', (event) => {
     const msg = event.data;
-    switch (msg.command) {
-      case 'setConversations':
-        conversations = msg.data || {};
-        if (msg.convDir) { convDataDir = msg.convDir; }
-        renderList();
-        break;
-      case 'recoverProgress':
-        showRecoverBanner(msg.done, msg.total);
-        break;
-      case 'recoverDone':
-        hideRecoverBanner();
-        showToast(`Recovered ${msg.activated} conversations ✅`);
-        break;
-      case 'exportProgress':
-        showToast(msg.text);
-        break;
-      case 'toast':
-        showToast(msg.text);
-        break;
-      case 'exportDone':
-        showToast(msg.text || 'Export complete ✅');
-        break;
-      case 'error':
-        showError(msg.text);
-        break;
-      case 'setExportPath':
-        if (msg.path && exportPathBar) {
-          exportPathBar.innerHTML = `Export to: <span class="export-path-link" id="export-path-text" title="Click to change">${esc(msg.path)}</span> <button class="export-path-btn" id="btn-change-path">Change</button> <button class="export-path-btn" id="btn-open-path">Open</button>`;
-          document.getElementById('btn-change-path').addEventListener('click', () => {
-            vscode.postMessage({ command: 'changeExportPath' });
-          });
-          document.getElementById('btn-open-path').addEventListener('click', () => {
-            vscode.postMessage({ command: 'openExportFolder' });
-          });
-          document.getElementById('export-path-text').addEventListener('click', () => {
-            vscode.postMessage({ command: 'changeExportPath' });
-          });
-        }
-        break;
+    try {
+      switch (msg.command) {
+        case 'setConversations':
+          conversations = msg.data || {};
+          if (msg.convDir) { convDataDir = msg.convDir; }
+          renderList();
+          break;
+        case 'recoverProgress':
+          showRecoverBanner(msg.done, msg.total);
+          break;
+        case 'recoverDone':
+          hideRecoverBanner();
+          showToast(`Recovered ${msg.activated} conversations ✅`);
+          break;
+        case 'exportProgress':
+          showToast(msg.text);
+          break;
+        case 'toast':
+          showToast(msg.text);
+          break;
+        case 'exportDone':
+          showToast(msg.text || 'Export complete ✅');
+          break;
+        case 'error':
+          showError(msg.text);
+          break;
+        case 'setExportPath':
+          if (msg.path && exportPathBar) {
+            exportPathBar.innerHTML = `Export to: <span class="export-path-link" id="export-path-text" title="Click to change">${esc(msg.path)}</span> <button class="export-path-btn" id="btn-change-path">Change</button> <button class="export-path-btn" id="btn-open-path">Open</button>`;
+            const btnChange = document.getElementById('btn-change-path');
+            const btnOpen = document.getElementById('btn-open-path');
+            const pathText = document.getElementById('export-path-text');
+            if (btnChange) {
+              btnChange.addEventListener('click', () => {
+                vscode.postMessage({ command: 'changeExportPath' });
+              });
+            }
+            if (btnOpen) {
+              btnOpen.addEventListener('click', () => {
+                vscode.postMessage({ command: 'openExportFolder' });
+              });
+            }
+            if (pathText) {
+              pathText.addEventListener('click', () => {
+                vscode.postMessage({ command: 'changeExportPath' });
+              });
+            }
+          }
+          break;
+      }
+    } catch (err) {
+      console.error('[AG History Webview] Error handling message:', err);
+      showError('Render error: ' + err);
     }
   });
 
