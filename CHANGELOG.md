@@ -4,6 +4,18 @@ All notable changes to the **Antigravity Webview History & Resume** extension wi
 
 ---
 
+## [0.3.1] - 2026-09-06
+
+### Added
+- 🛟 **Botón "Rescatar Huérfanos"**: Botón dedicado en la barra superior (`top-bar`) y en el menú de la barra lateral para escanear y reactivar bajo demanda todas las conversaciones huérfanas en disco.
+- ⚡ **Auto-Aceptación en Reanudar**: Al hacer clic en `▶ Reanudar`, se envía automáticamente la confirmación al selector rápido para abrir el chat en el Agente de Antigravity sin requerir presionar Enter.
+
+### Fixed
+- 🐛 **Soporte de Bases SQLite `.db`**: Corregido el escaneo de recuperación para incluir archivos `.db` además de los antiguos `.pb`, permitiendo detectar todas las conversaciones de Antigravity IDE.
+- 🔧 **Integración con LoadTrajectory**: Inclusión de la llamada gRPC `LoadTrajectory` para pre-cargar la trayectoria activa en el servidor de lenguaje.
+
+---
+
 ## [0.3.0] - 2026-09-06 (AudiXP Official Release)
 
 ### Added

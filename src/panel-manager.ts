@@ -10,7 +10,7 @@ import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { discoverAndListAll, getAllTrajectories, getTrajectorySteps, TrajectorySummary } from './ls-client.js';
+import { discoverAndListAll, getAllTrajectories, getTrajectorySteps, callApi, TrajectorySummary } from './ls-client.js';
 import { recoverUnindexed } from './recovery.js';
 import { readCache, writeCache } from './cache.js';
 import { parseSteps, FieldLevel } from './parser.js';
@@ -91,6 +91,9 @@ function setupWebviewMessageHandler(webview: vscode.Webview, subscriptions: vsco
         case 'refresh':
           await handleRefresh(webview);
           break;
+        case 'rescueOrphans':
+          await handleRescueOrphans(webview);
+          break;
         case 'resumeChat':
           await handleResumeChat(message.cascadeId);
           break;
@@ -148,6 +151,16 @@ export function refreshPanel(): void {
     handleRefresh(currentSidebarView.webview);
   } else {
     handleRefresh();
+  }
+}
+
+export function rescueOrphansPanel(): void {
+  if (currentPanel) {
+    handleRescueOrphans(currentPanel.webview);
+  } else if (currentSidebarView) {
+    handleRescueOrphans(currentSidebarView.webview);
+  } else {
+    handleRescueOrphans();
   }
 }
 
@@ -329,6 +342,50 @@ async function handleExportAll(): Promise<void> {
 
 // ── Helpers ──
 
+async function handleRescueOrphans(targetWebview?: vscode.Webview): Promise<void> {
+  try {
+    postMessage({ command: 'toast', text: '🔍 Buscando y rescatando conversaciones huérfanas...' }, targetWebview);
+
+    // Discover LS endpoints
+    const discovery = await discoverAndListAll();
+    cachedEndpointMap = discovery.cascadeToEndpoint;
+    cachedConversations = { ...cachedConversations, ...discovery.conversations };
+
+    if (discovery.endpoints.length === 0) {
+      vscode.window.showWarningMessage('No se detectó ningún Language Server de Antigravity activo.');
+      postMessage({ command: 'toast', text: '⚠️ No hay Language Server activo para rescatar' }, targetWebview);
+      return;
+    }
+
+    const indexedIds = new Set(Object.keys(cachedConversations));
+    const epList = discovery.endpoints.map((e) => ({ port: e.port, csrf: e.csrf }));
+
+    const recovery = await recoverUnindexed(
+      indexedIds,
+      epList,
+      (done: number, total: number) => {
+        postMessage({ command: 'recoverProgress', done, total }, targetWebview);
+      },
+      true, // forceAll: escanea y rescata todas las conversaciones en disco (.db y .pb)
+    );
+
+    // Refetch full list
+    const refreshed = await discoverAndListAll();
+    cachedEndpointMap = refreshed.cascadeToEndpoint;
+    cachedConversations = { ...cachedConversations, ...refreshed.conversations };
+    writeCache(cachedConversations);
+
+    postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() }, targetWebview);
+    postMessage({ command: 'recoverDone', activated: recovery.activated, total: recovery.total }, targetWebview);
+    postMessage({ command: 'toast', text: `🛟 Rescate finalizado: ${recovery.activated} conversaciones reactivadas ✅` }, targetWebview);
+
+    vscode.window.showInformationMessage(`Rescate completado: ${recovery.activated} de ${recovery.total} conversaciones reactivadas en Antigravity.`);
+  } catch (e) {
+    vscode.window.showErrorMessage(`Error en rescate de huérfanos: ${e}`);
+    postMessage({ command: 'error', text: `Rescate falló: ${e}` }, targetWebview);
+  }
+}
+
 async function handleResumeChat(cascadeId: string): Promise<void> {
   if (!cascadeId) { return; }
 
@@ -350,6 +407,8 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
     try {
       // 1. Hot-activation: force LanguageServer to load .db into memory buffer
       await getTrajectorySteps(ep.port, ep.csrf, cascadeId, 1);
+      // Also notify LoadTrajectory if possible
+      callApi(ep.port, ep.csrf, 'LoadTrajectory', { cascadeId }, 2000).catch(() => {});
     } catch (e) {
       console.warn('Hot-activation error:', e);
     }
@@ -380,8 +439,29 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
     }
   }
 
+  // 5. Opción A: Simulación de confirmación automática de teclado
+  setTimeout(async () => {
+    try {
+      await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem');
+    } catch {
+      // fallback
+    }
+    try {
+      await vscode.commands.executeCommand('openTrajectory');
+    } catch {
+      // fallback
+    }
+  }, 200);
+
+  setTimeout(async () => {
+    try {
+      await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem');
+    } catch {
+      // fallback
+    }
+  }, 450);
+
   postMessage({ command: 'toast', text: `Chat reactivado en Antigravity ✅` });
-  vscode.window.showInformationMessage(`Conversación ${cascadeId.slice(0, 8)} reactivada. Presiona Enter en el selector para abrirla.`);
 }
 
 function postMessage(msg: Record<string, unknown>, targetWebview?: vscode.Webview): void {
@@ -440,6 +520,7 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
       <button class="seg-btn" id="btn-expand-all" title="Expand All">▾ Expand</button>
       <button class="seg-btn" id="btn-collapse-all" title="Collapse All">▸ Collapse</button>
     </div>
+    <button class="btn btn-rescue" id="btn-rescue" title="Rescatar conversaciones huérfanas en disco">🛟 Rescatar</button>
     <button class="btn btn-icon" id="btn-refresh" title="Refresh">↻</button>
     <button class="btn btn-primary" id="btn-export-all">Export All</button>
   </div>

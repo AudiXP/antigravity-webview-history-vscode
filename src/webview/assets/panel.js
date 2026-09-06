@@ -6,6 +6,7 @@
 
   // ── DOM refs ──
   const searchInput = document.getElementById('search-input');
+  const rescueBtn = document.getElementById('btn-rescue');
   const refreshBtn = document.getElementById('btn-refresh');
   const exportAllBtn = document.getElementById('btn-export-all');
   const statsBar = document.getElementById('stats-bar');
@@ -26,6 +27,14 @@
   let convDataDir = '';
 
   // ── Init ──
+  if (rescueBtn) {
+    rescueBtn.addEventListener('click', () => {
+      rescueBtn.disabled = true;
+      rescueBtn.textContent = '🛟 Rescatando...';
+      vscode.postMessage({ command: 'rescueOrphans' });
+    });
+  }
+
   if (refreshBtn) {
     refreshBtn.addEventListener('click', () => {
       vscode.postMessage({ command: 'refresh' });
@@ -93,6 +102,10 @@
         case 'setConversations':
           conversations = msg.data || {};
           if (msg.convDir) { convDataDir = msg.convDir; }
+          if (rescueBtn) {
+            rescueBtn.disabled = false;
+            rescueBtn.textContent = '🛟 Rescatar';
+          }
           renderList();
           break;
         case 'recoverProgress':
@@ -100,6 +113,10 @@
           break;
         case 'recoverDone':
           hideRecoverBanner();
+          if (rescueBtn) {
+            rescueBtn.disabled = false;
+            rescueBtn.textContent = '🛟 Rescatar';
+          }
           showToast(`Recovered ${msg.activated} conversations ✅`);
           break;
         case 'exportProgress':
@@ -112,6 +129,10 @@
           showToast(msg.text || 'Export complete ✅');
           break;
         case 'error':
+          if (rescueBtn) {
+            rescueBtn.disabled = false;
+            rescueBtn.textContent = '🛟 Rescatar';
+          }
           showError(msg.text);
           break;
         case 'setExportPath':

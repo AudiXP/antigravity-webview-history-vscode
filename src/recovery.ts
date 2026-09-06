@@ -27,16 +27,16 @@ export function getConversationsDirs(): string[] {
 }
 
 /**
- * Scan .pb files across all conversation directories and return unique cascade IDs.
+ * Scan .pb and .db files across all conversation directories and return unique cascade IDs.
  */
-export function scanPbFiles(convDirs: string[]): string[] {
+export function scanDiskFiles(convDirs: string[]): string[] {
   const allIds = new Set<string>();
   for (const dir of convDirs) {
     try {
       const files = fs.readdirSync(dir);
       for (const f of files) {
-        if (f.endsWith('.pb')) {
-          allIds.add(f.replace('.pb', ''));
+        if (f.endsWith('.pb') || f.endsWith('.db')) {
+          allIds.add(f.replace(/\.(pb|db)$/, ''));
         }
       }
     } catch {
@@ -46,29 +46,33 @@ export function scanPbFiles(convDirs: string[]): string[] {
   return Array.from(allIds);
 }
 
+// Alias for backwards compatibility
+export const scanPbFiles = scanDiskFiles;
+
 /**
  * Recover unindexed conversations by triggering on-demand loading.
  *
  * @param indexedIds Set of already-indexed cascade IDs
- * @param port Working LS port
- * @param csrf CSRF token
+ * @param endpoints Active LS endpoints
  * @param onProgress Callback for progress updates
+ * @param forceAll If true, triggers activation for all conversations found on disk
  * @returns Number of newly activated conversations
  */
 export async function recoverUnindexed(
   indexedIds: Set<string>,
   endpoints: Array<{ port: number; csrf: string }>,
   onProgress?: (done: number, total: number, id: string) => void,
+  forceAll = false,
 ): Promise<{ activated: number; failed: number; total: number }> {
   const convDirs = getConversationsDirs();
   if (convDirs.length === 0 || endpoints.length === 0) {
     return { activated: 0, failed: 0, total: 0 };
   }
 
-  const allDiskIds = scanPbFiles(convDirs);
-  const unindexed = allDiskIds.filter((id) => !indexedIds.has(id));
+  const allDiskIds = scanDiskFiles(convDirs);
+  const targets = forceAll ? allDiskIds : allDiskIds.filter((id) => !indexedIds.has(id));
 
-  if (unindexed.length === 0) {
+  if (targets.length === 0) {
     return { activated: 0, failed: 0, total: 0 };
   }
 
@@ -77,8 +81,8 @@ export async function recoverUnindexed(
 
   // Process in batches of 10, round-robin across endpoints for load balancing
   const batchSize = 10;
-  for (let i = 0; i < unindexed.length; i += batchSize) {
-    const batch = unindexed.slice(i, i + batchSize);
+  for (let i = 0; i < targets.length; i += batchSize) {
+    const batch = targets.slice(i, i + batchSize);
     const promises = batch.map(async (cascadeId, j) => {
       // Round-robin across available endpoints
       const ep = endpoints[(i + j) % endpoints.length];
@@ -86,17 +90,19 @@ export async function recoverUnindexed(
         ep.port, ep.csrf,
         'GetCascadeTrajectorySteps',
         { cascadeId, startIndex: 0, endIndex: 1 },  // stepCount=1, just trigger indexing
-        5000,  // 5s timeout (was 10s)
+        5000,  // 5s timeout
       );
+      // Also notify LoadTrajectory if possible
+      callApi(ep.port, ep.csrf, 'LoadTrajectory', { cascadeId }, 2000).catch(() => {});
       return { cascadeId, success: result !== null };
     });
 
     const results = await Promise.all(promises);
     for (const r of results) {
       if (r.success) { activated++; } else { failed++; }
-      onProgress?.(activated + failed, unindexed.length, r.cascadeId);
+      onProgress?.(activated + failed, targets.length, r.cascadeId);
     }
   }
 
-  return { activated, failed, total: unindexed.length };
+  return { activated, failed, total: targets.length };
 }

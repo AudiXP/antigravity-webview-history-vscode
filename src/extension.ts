@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { openPanel, refreshPanel, registerSidebarViewProvider } from './panel-manager.js';
+import { openPanel, refreshPanel, rescueOrphansPanel, registerSidebarViewProvider } from './panel-manager.js';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('[Antigravity History] Extension activated');
@@ -24,6 +24,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('aghistory.refresh', () => {
       refreshPanel();
       if (!refreshPanel) { openPanel(context); }
+    }),
+    vscode.commands.registerCommand('aghistory.rescueOrphans', () => {
+      rescueOrphansPanel();
     }),
     vscode.commands.registerCommand('aghistory.export', () => {
       vscode.window.showInformationMessage('Use the panel to export individual conversations.');

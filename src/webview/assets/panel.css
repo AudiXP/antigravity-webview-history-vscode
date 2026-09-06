@@ -110,6 +110,23 @@ body {
   background: var(--vscode-button-hoverBackground, #1177bb);
 }
 
+.btn-rescue {
+  background: #d97706;
+  color: #ffffff;
+  font-weight: 500;
+  border: 1px solid #b45309;
+}
+
+.btn-rescue:hover {
+  background: #f59e0b;
+  opacity: 1;
+}
+
+.btn-rescue:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ── Field Level Select ── */
 .field-level-select {
   padding: 5px 8px;
