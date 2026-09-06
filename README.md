@@ -1,93 +1,107 @@
-# Every prompt deserves a history.
+# Antigravity Webview History & Resume
 
-[English](README.md) | [中文](README_CN.md)
-
-[![OpenVSX](https://img.shields.io/open-vsx/dt/neo1027144/antigravity-history?label=OpenVSX%20Downloads&color=blueviolet)](https://open-vsx.org/extension/neo1027144/antigravity-history)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/neo1027144-creator/antigravity-history-vscode?style=social)](https://github.com/neo1027144-creator/antigravity-history-vscode)
+[![GitHub Stars](https://img.shields.io/github/stars/AudiXP/antigravity-webview-history-vscode?style=social)](https://github.com/AudiXP/antigravity-webview-history-vscode)
+[![Release](https://img.shields.io/github/v/release/AudiXP/antigravity-webview-history-vscode?color=emerald)](https://github.com/AudiXP/antigravity-webview-history-vscode/releases)
 
-> ⚠️ **Important:** Please make sure your **Antigravity IDE is updated to the latest version** before using this extension. Older versions may cause "Client is not running" errors and prevent conversations from loading. 👉 [**Download / Update Antigravity**](https://antigravity.google/releases)
+**Browse, search, resume, and export your Antigravity AI conversations — right inside your IDE.**
 
-**Browse, search, and export your Antigravity AI conversations — right inside your IDE.**
-
-> *Never lose a brilliant solution, a debugging insight, or an architectural decision again.*
+> *Never lose a brilliant solution, a debugging insight, or an orphaned conversation again.*
 
 ---
 
 ![Dashboard Overview](docs/screenshots/dashboard.png)
 
-## Features
+---
 
-### 📋 Conversation Dashboard
-- See **all conversations** at a glance, grouped by date or workspace
-- Quick search by title
-- Collapsible groups with expand/collapse all
-- Conversation stats: step count, timestamps, status indicator
+## 🌟 Key Features
+
+### ⚡ ▶ One-Click Chat Resume (*Exclusive*)
+* **Resume any conversation:** Click the green **`▶ Reanudar`** button on any chat card to instantly re-activate that conversation.
+* **Solves orphaned conversations:** Automatically indexes and hot-activates lazy-loaded conversations in Antigravity's local Language Server buffer.
+* **Auto-focus Agent:** Immediately opens and focuses the Antigravity Agent chat panel so you can continue typing right where you left off.
+
+### 📋 Visual Conversation Dashboard
+* See **all conversations** at a glance in an interactive, responsive editor tab.
+* Group by **Date** or **Workspace**.
+* **Real-time fuzzy search** by conversation title, topic, or workspace folder.
+* Rich metadata: step counts, exact timestamps, and execution status indicator dots.
+* One-click navigation: open the workspace folder in Explorer or open the conversation's `brain/` directory.
 
 ![Search & Filter](docs/screenshots/search.png)
 
-### 📦 One-Click Export
-- Export individual conversations as **Markdown** or **JSON**
-- **Bulk export** all conversations with one click
-- Configurable export path with visual path selector
-- Export completion notification with "Open Folder" action
+### 📦 High-Fidelity Export (Markdown & JSON)
+* Export individual conversations or **bulk export everything** with 1 click.
+* **Full fidelity extraction:** Includes AI thinking chains (*reasoning traces*), exact code diffs, and terminal outputs.
+* Configurable output directory and format options (`md`, `json`, `all`).
 
 ![Export in Action](docs/screenshots/export.png)
 
-### 🔄 Auto Recovery
-- Automatically discovers and recovers **unindexed conversations** from disk
-- Progress bar showing recovery status
-- Detects conversations auto-cleaned by Antigravity's 100-conversation limit
-- Local JSON cache for **instant startup** after IDE restart
+### 🔄 Persistent Local Cache & Auto-Recovery
+* Automatically discovers and recovers **unindexed conversations** stored on disk.
+* Persists conversation index in `~/.gemini/antigravity-history/cache.json` for **instant startup** after IDE restarts.
+* Fully compatible with standard Antigravity directories (`~/.gemini/antigravity-ide/conversations`).
 
-### 🔒 Privacy First
-- **100% local** — all data stays on your machine
-- **Read-only** — never modifies your Antigravity data
-- **No telemetry** — zero external network requests
+### 🔒 100% Local & Private
+* **Zero external network requests:** Communicates strictly with your local Antigravity Language Server on `127.0.0.1`.
+* **Safe and non-destructive:** Never corrupts or alters your original SQLite database files.
 
-## Installation
+---
 
-### From VSIX (Manual)
-1. Download the `.vsix` file from [Releases](https://github.com/neo1027144-creator/antigravity-history-vscode/releases)
-2. In VS Code / Antigravity: `Ctrl+Shift+P` → `Install from VSIX`
+## 🚀 Installation
 
-### From OpenVSX
-Search **"Antigravity History"** in the Extensions panel, or run:
+### Option 1: Install from VSIX (Recommended)
+1. Download the latest `.vsix` file from [**Releases**](https://github.com/AudiXP/antigravity-webview-history-vscode/releases).
+2. In Antigravity IDE / VS Code:
+   * Press `Ctrl+Shift+P`
+   * Select **Extensions: Install from VSIX...**
+   * Choose the downloaded file.
+
+### Option 2: Command Line Installation
+```powershell
+& "C:\Users\<user>\AppData\Local\Programs\Antigravity IDE\bin\antigravity-ide.cmd" --install-extension antigravity-webview-history-vscode-0.3.0.vsix --force
 ```
-ext install neo1027144.antigravity-history
-```
 
-## Usage
+---
 
-1. Click the **AG History** button in the status bar (bottom of IDE)
-2. The conversation panel opens as an editor tab
-3. Browse, search, and export your conversations
+## 📖 Usage
 
-## Settings
+1. Click the **`$(history) AG History`** button in the bottom status bar (or press `Ctrl+Shift+P` and run **Open Antigravity History**).
+2. The interactive Conversation Manager will open in an editor tab.
+3. Use the search bar to locate any conversation.
+4. Click **`▶ Reanudar`** to continue chatting, or export your session to **MD** / **JSON**.
+
+---
+
+## ⚙️ Configuration Settings
 
 | Setting | Default | Description |
-|---------|---------|-------------|
-| `aghistory.exportPath` | `./antigravity_export` | Default export directory |
-| `aghistory.exportFormat` | `md` | Export format: `md`, `json`, or `all` |
-| `aghistory.fieldLevel` | `thinking` | Detail level: `basic`, `full`, or `thinking` |
+|---|---|---|
+| `aghistory.exportPath` | `./antigravity_export` | Default directory for exported files |
+| `aghistory.exportFormat` | `all` | Export format: `md`, `json`, or `all` |
+| `aghistory.fieldLevel` | `thinking` | Detail level: `default` (messages), `thinking` (+ reasoning), or `full` (+ diffs and command outputs) |
 
-## Requirements
+---
 
-- [Antigravity](https://antigravity.google/releases) IDE (latest version recommended)
-- At least one active workspace open in Antigravity
-- Tested and verified on **Windows**
+## 🛠️ Development & Building from Source
 
-## Roadmap
+```bash
+# Clone the repository
+git clone https://github.com/AudiXP/antigravity-webview-history-vscode.git
+cd antigravity-webview-history-vscode
 
-- 🔜 Conversation content preview
-- 🔜 Advanced search (by date range, workspace, step count)
-- 🔜 Conversation tagging and favorites
-- 🔜 Direct integration with Antigravity chat panel
+# Install dependencies
+npm install
 
-## Related
+# Compile extension
+npm run build
 
-- **[antigravity-history](https://github.com/neo1027144-creator/antigravity-history)** — CLI tool for Antigravity conversation export (PyPI: `pip install antigravity-history`)
+# Package into .vsix
+npx @vscode/vsce package --no-dependencies
+```
 
-## License
+---
 
-Apache 2.0 — see [LICENSE](LICENSE)
+## 📄 License
+
+This project is licensed under the Apache 2.0 License — see the [LICENSE](LICENSE) file for details.

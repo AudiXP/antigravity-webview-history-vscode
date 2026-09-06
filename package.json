@@ -1,14 +1,15 @@
 {
-  "name": "antigravity-history",
-  "displayName": "Antigravity History - Browse & Export AI Chat",
-  "description": "Browse, search, and export your Antigravity AI conversations — with full fidelity. View AI thinking chains, code diffs, and command outputs in a beautiful chat UI.",
-  "version": "0.2.1",
-  "publisher": "neo1027144",
+  "name": "antigravity-webview-history-vscode",
+  "displayName": "Antigravity History & Resume — AI Conversation Manager",
+  "description": "Browse, search, resume, and export your Antigravity AI conversations. Resume past chats with 1-click and export with full fidelity.",
+  "version": "0.3.0",
+  "publisher": "AudiXP",
+  "author": "AudiXP",
   "license": "Apache-2.0",
   "icon": "resources/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/neo1027144-creator/antigravity-history-vscode"
+    "url": "https://github.com/AudiXP/antigravity-webview-history-vscode"
   },
   "engines": {
     "vscode": "^1.85.0"
