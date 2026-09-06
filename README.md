@@ -63,9 +63,16 @@
    * Select **Extensions: Install from VSIX...**
    * Choose the downloaded file.
 
-### Option 2: Command Line Installation
+### Option 2: Command Line Installation (PowerShell)
+
+**One-line auto-download and install:**
 ```powershell
-& "C:\Users\<user>\AppData\Local\Programs\Antigravity IDE\bin\antigravity-ide.cmd" --install-extension antigravity-webview-history-vscode-0.3.0.vsix --force
+curl.exe -L -o antigravity-webview-history.vsix "https://github.com/AudiXP/antigravity-webview-history-vscode/releases/download/v0.3.0/antigravity-webview-history-vscode-0.3.0.vsix"; & "$env:LOCALAPPDATA\Programs\Antigravity IDE\bin\antigravity-ide.cmd" --install-extension antigravity-webview-history.vsix --force
+```
+
+Or if you already downloaded the `.vsix` file locally:
+```powershell
+& "$env:LOCALAPPDATA\Programs\Antigravity IDE\bin\antigravity-ide.cmd" --install-extension antigravity-webview-history-vscode-0.3.0.vsix --force
 ```
 
 ---
