@@ -88,6 +88,9 @@
       case 'exportProgress':
         showToast(msg.text);
         break;
+      case 'toast':
+        showToast(msg.text);
+        break;
       case 'exportDone':
         showToast(msg.text || 'Export complete ✅');
         break;
@@ -188,6 +191,7 @@
           ${convFileHtml}
         </div>
         <div class="conv-actions">
+          <button class="btn-export btn-resume" data-action="resumeChat" data-id="${esc(cascadeId)}" title="Reanudar conversación en Antigravity">▶ Reanudar</button>
           <button class="btn-export" data-action="exportMd" data-id="${esc(cascadeId)}">MD</button>
           <button class="btn-export" data-action="exportJson" data-id="${esc(cascadeId)}">JSON</button>
           <button class="btn-export" data-action="copyId" data-id="${esc(cascadeId)}" title="Copy Cascade ID">ID</button>
@@ -204,7 +208,10 @@
         e.stopPropagation();
         const action = btn.getAttribute('data-action');
         const cascadeId = btn.getAttribute('data-id');
-        if (action === 'exportMd') {
+        if (action === 'resumeChat') {
+          vscode.postMessage({ command: 'resumeChat', cascadeId });
+          showToast('Reanudando conversación en Antigravity...');
+        } else if (action === 'exportMd') {
           vscode.postMessage({ command: 'export', cascadeId, format: 'md' });
           showToast('Exporting Markdown...');
         } else if (action === 'exportJson') {

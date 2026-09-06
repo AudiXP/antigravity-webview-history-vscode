@@ -358,6 +358,20 @@ body {
   color: var(--vscode-button-foreground, #fff);
 }
 
+.btn-resume {
+  background: #107c41;
+  color: #ffffff;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.btn-resume:hover {
+  background: #169b52 !important;
+  color: #ffffff !important;
+}
+
 .btn-copy {
   padding: 3px 6px;
   background: transparent;
