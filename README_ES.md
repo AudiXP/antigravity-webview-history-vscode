@@ -75,6 +75,28 @@ O si ya tienes el archivo `.vsix` descargado localmente:
 & "$env:LOCALAPPDATA\Programs\Antigravity IDE\bin\antigravity-ide.cmd" --install-extension antigravity-webview-history-vscode-0.3.0.vsix --force
 ```
 
+### 💡 ¿Dónde veo mi extensión después de instalar?
+
+#### 🔄 Paso 1: Recargar la ventana del IDE (1 segundo)
+Si instalaste la extensión mientras Antigravity IDE ya estaba abierto, es necesario recargar la ventana para montarla:
+1. Presiona el atajo: **`Ctrl + Shift + P`**
+2. Escribe: **`Reload Window`** *(o `Recargar ventana` si lo tienes en español)*
+3. Presiona **`Enter`**.
+
+#### 📍 Paso 2: Dónde encontrar la extensión una vez recargada
+Una vez que la ventana se reinicie, la verás en tres lugares:
+
+1. **En la barra de estado inferior (esquina inferior derecha):**  
+   Verás un nuevo botón con el icono de un reloj que dice:  
+   👉 **`AG History`**  
+   *(Al hacer clic sobre él, se abrirá de inmediato el dashboard con todos tus chats y el botón verde `▶ Reanudar`)*.
+2. **Mediante la Paleta de Comandos:**  
+   Presiona **`Ctrl + Shift + P`** y escribe:  
+   `Open Antigravity History`
+3. **En el panel lateral de extensiones (`Ctrl + Shift + X`):**  
+   Busca en la sección **INSTALLED** y verás:  
+   **`Antigravity History & Resume — AI Conversation Manager`** (por **AudiXP**).
+
 ---
 
 ## 📖 Modo de Uso
