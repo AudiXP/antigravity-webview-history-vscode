@@ -1,8 +1,11 @@
 import * as vscode from 'vscode';
-import { openPanel, refreshPanel } from './panel-manager.js';
+import { openPanel, refreshPanel, registerSidebarViewProvider } from './panel-manager.js';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('[Antigravity History] Extension activated');
+
+  // ── Register Sidebar View Provider (Activity Bar) ──
+  registerSidebarViewProvider(context);
 
   // ── Status Bar Button ──
   const statusBarItem = vscode.window.createStatusBarItem(

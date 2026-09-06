@@ -45,6 +45,38 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aghistory-sidebar",
+          "title": "Antigravity History",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "aghistory-sidebar": [
+        {
+          "type": "webview",
+          "id": "aghistory.sidebarView",
+          "name": "Conversations"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "aghistory.openPanel",
+          "when": "view == aghistory.sidebarView",
+          "group": "navigation"
+        },
+        {
+          "command": "aghistory.refresh",
+          "when": "view == aghistory.sidebarView",
+          "group": "navigation"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "aghistory.openPanel",

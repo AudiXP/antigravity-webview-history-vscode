@@ -22,6 +22,7 @@ import {
 } from './formatter.js';
 
 let currentPanel: vscode.WebviewPanel | undefined;
+let currentSidebarView: vscode.WebviewView | undefined;
 let cachedEndpointMap: Record<string, { port: number; csrf: string }> = {};
 let cachedConversations: Record<string, TrajectorySummary> = {};
 
@@ -50,8 +51,40 @@ export function openPanel(context: vscode.ExtensionContext): void {
     currentPanel = undefined;
   }, null, context.subscriptions);
 
-  // ── Handle messages from webview ──
-  currentPanel.webview.onDidReceiveMessage(
+  setupWebviewMessageHandler(currentPanel.webview, context.subscriptions);
+}
+
+export function registerSidebarViewProvider(context: vscode.ExtensionContext): void {
+  const provider: vscode.WebviewViewProvider = {
+    resolveWebviewView(webviewView: vscode.WebviewView) {
+      currentSidebarView = webviewView;
+      webviewView.webview.options = {
+        enableScripts: true,
+        localResourceRoots: [
+          vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview'),
+        ],
+      };
+
+      webviewView.webview.html = getWebviewHtml(webviewView.webview, context.extensionUri);
+
+      webviewView.onDidDispose(() => {
+        currentSidebarView = undefined;
+      });
+
+      setupWebviewMessageHandler(webviewView.webview, context.subscriptions);
+
+      // Load initial cached conversations
+      handleRefresh();
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('aghistory.sidebarView', provider),
+  );
+}
+
+function setupWebviewMessageHandler(webview: vscode.Webview, subscriptions: vscode.Disposable[]): void {
+  webview.onDidReceiveMessage(
     async (message) => {
       switch (message.command) {
         case 'refresh':
@@ -103,7 +136,7 @@ export function openPanel(context: vscode.ExtensionContext): void {
       }
     },
     undefined,
-    context.subscriptions,
+    subscriptions,
   );
 }
 
@@ -341,6 +374,7 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
 
 function postMessage(msg: Record<string, unknown>): void {
   currentPanel?.webview.postMessage(msg);
+  currentSidebarView?.webview.postMessage(msg);
 }
 
 function resolveExportPath(configPath: string): string {
