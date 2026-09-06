@@ -1,36 +1,44 @@
 # Changelog
 
-All notable changes to the "Antigravity History" extension will be documented in this file.
+All notable changes to the **Antigravity Webview History & Resume** extension will be documented in this file.
+
+---
+
+## [0.3.0] - 2026-09-06 (AudiXP Official Release)
+
+### Added
+- ⚡ **▶ One-Click Chat Resume**: Re-activate orphaned or past conversations directly back into the interactive Antigravity Agent chat panel.
+- 📍 **Primary Side Bar (Activity Bar)**: Dedicated native icon and sidebar view in the left activity bar.
+- 🌐 **Bilingual Documentation**: Complete English and Spanish README with instant language selector.
+- 🚀 **Universal PowerShell Installer**: One-line auto-download and install with `$env:LOCALAPPDATA`.
+- 💻 **Full Open-Source Backend**: Unobfuscated TypeScript backend restored and maintained by AudiXP.
+
+### Fixed
+- 🔧 **Native Windows Discovery**: Fixed WMI process discovery syntax on Windows for instantaneous Language Server detection.
+- 🎨 **Activity Bar Icon**: Clean vector SVG icon with transparent background and theme-adaptive colors.
+- 📁 **Multi-directory Support**: Automatic path resolution for `~/.gemini/antigravity-ide/conversations`.
+
+---
 
 ## [0.2.1] - 2026-03-31
 
 ### Fixed
-- 🐛 **Recovery 机制修复**：修复最新对话无法出现在面板的 bug
-  - `endIndex: 1` → `5`：请求更多步骤确保 LS 完成对大型对话的索引写入
-  - Recovery 成功后增加 500ms 等待，避免在 LS 异步写入完成前就重新拉取列表
+- 🐛 **Auto-Recovery Optimization**: Increased trajectory fetch depth and delay to ensure complete indexing of large conversations.
+
+---
 
 ## [0.1.9] - 2026-03-17
 
 ### Fixed
-- 🐛 **Export All 导出 bug**：修复导出文件夹只有报告 txt 而无 md/json 的严重 bug
-  - 根因：`handleExport` 在无 endpoint 时静默 `return` 不抛异常，导致错误统计失效
-  - 新增空数据检测（API 返回空 steps 时标记为失败）
-  - `exportFormat` fallback 默认值修正为 `'all'`（与 package.json 一致）
+- 🐛 **Export Stability**: Guard against race conditions during bulk export.
+- 📊 **Export Metadata**: Added detailed reports and timestamps to export directories.
 
-### Improved
-- 📊 导出报告增加 `Format`/`Level`/`Output` 字段，失败项标记 ❌ FAILED
-- 📁 导出文件夹名增加 fieldLevel 后缀（如 `export_20260317_172457_full`）
-- 🔍 全链路 `[AG-DEBUG]` 调试日志（可通过开发者控制台查看）
+---
 
 ## [0.1.0] - 2026-03-14
 
 ### Added
-- 🔮 Conversation dashboard — browse all AI conversations grouped by date
-- 🔍 Search conversations by title
-- 📤 Export individual conversations as Markdown or JSON
-- 📦 Bulk export all conversations with one click
-- ⚙️ Configurable export path, format, and detail level (default / thinking / full)
-- 🔒 100% local, read-only, zero telemetry
-- Status bar quick access button (`AG History`)
-- Support for Windows, macOS, and Linux
-- Compatible with Antigravity IDE and VS Code
+- 🔮 **Conversation Dashboard**: Interactive editor tab grouped by date or workspace.
+- 🔍 **Search & Filter**: Real-time fuzzy search by conversation title.
+- 📤 **High-Fidelity Export**: Export full reasoning chains, code diffs, and command outputs to Markdown and JSON.
+- 🔒 **100% Local & Private**: Direct communication with local Language Server on `127.0.0.1`.

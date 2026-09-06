@@ -45,28 +45,28 @@ export function discoverLanguageServers(): LsProcess[] {
 function discoverWindows(): LsProcess[] {
   const servers: LsProcess[] = [];
   try {
-    const cmd =
-      "Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'language_server*' } | " +
-      'Select-Object ProcessId, CommandLine | ConvertTo-Json';
-    const stdout = execSync(`powershell -Command "${cmd}"`, {
-      timeout: 15000,
+    const psScript = "Get-CimInstance Win32_Process -Filter \\\"Name LIKE 'language_server%'\\\" | Select-Object ProcessId, CommandLine | ConvertTo-Json -Compress";
+    const stdout = execSync(`powershell.exe -NoProfile -NonInteractive -Command "${psScript}"`, {
+      timeout: 10000,
       encoding: 'utf-8',
       windowsHide: true,
     });
-    if (!stdout.trim()) {return servers;}
+    if (!stdout.trim()) { return servers; }
 
     let data = JSON.parse(stdout);
-    if (!Array.isArray(data)) {data = [data];}
+    if (!Array.isArray(data)) { data = [data]; }
 
     for (const proc of data) {
       const cmdLine: string = proc.CommandLine || '';
       const pid: number = proc.ProcessId;
-      if (!cmdLine) {continue;}
+      if (!cmdLine) { continue; }
       const csrf = extractCsrf(cmdLine);
-      servers.push({ pid, csrf, cmd: cmdLine });
+      if (csrf) {
+        servers.push({ pid, csrf, cmd: cmdLine });
+      }
     }
-  } catch {
-    // WMI query failed — silently ignore
+  } catch (err) {
+    console.error('[Antigravity History] WMI discovery error:', err);
   }
   return servers;
 }
@@ -161,8 +161,8 @@ function findPortsWindows(pid: number): number[] {
     const pidStr = String(pid);
     for (const line of stdout.split('\n')) {
       if (line.includes('LISTENING') && line.includes(pidStr)) {
-        const m = line.match(/127\.0\.0\.1:(\d+)/);
-        if (m) {ports.push(parseInt(m[1], 10));}
+        const m = line.match(/(?:127\.0\.0\.1|0\.0\.0\.0|\[::\]):(\d+)/);
+        if (m) { ports.push(parseInt(m[1], 10)); }
       }
     }
   } catch {
