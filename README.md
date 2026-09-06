@@ -1,5 +1,11 @@
 # Antigravity Webview History & Resume
 
+<p align="center">
+  <b>🌐 Idioma / Language:</b>
+  <a href="README.md"><b>English</b></a> |
+  <a href="README_ES.md"><b>Español</b></a>
+</p>
+
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/AudiXP/antigravity-webview-history-vscode?style=social)](https://github.com/AudiXP/antigravity-webview-history-vscode)
 [![Release](https://img.shields.io/github/v/release/AudiXP/antigravity-webview-history-vscode?color=emerald)](https://github.com/AudiXP/antigravity-webview-history-vscode/releases)
