@@ -413,6 +413,11 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
+.conv-card.archived {
+  opacity: 0.8;
+  border-style: dashed;
+}
+
 .conv-icon {
   flex-shrink: 0;
   width: 14px;

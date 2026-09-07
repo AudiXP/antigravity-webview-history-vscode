@@ -18,6 +18,7 @@
   const groupRecentBtn = document.getElementById('group-recent');
   const groupDateBtn = document.getElementById('group-date');
   const groupWorkspaceBtn = document.getElementById('group-workspace');
+  const groupArchivedBtn = document.getElementById('group-archived');
   const expandAllBtn = document.getElementById('btn-expand-all');
   const collapseAllBtn = document.getElementById('btn-collapse-all');
   const fieldLevelSelect = document.getElementById('field-level-select');
@@ -27,6 +28,7 @@
   let searchQuery = '';
   let groupMode = 'current-ws'; // Default to current-ws!
   let collapsedGroups = new Set();
+  let archivedIds = new Set();
   let convDataDir = '';
   let currentWorkspace = '';
   let currentWorkspaceName = '';
@@ -90,7 +92,7 @@
   // Segmented control navigation
   function setGroupMode(mode) {
     groupMode = mode;
-    const allBtns = [groupCurrentWsBtn, groupRecentBtn, groupDateBtn, groupWorkspaceBtn];
+    const allBtns = [groupCurrentWsBtn, groupRecentBtn, groupDateBtn, groupWorkspaceBtn, groupArchivedBtn];
     allBtns.forEach((btn) => {
       if (!btn) return;
       btn.classList.remove('active');
@@ -100,6 +102,7 @@
     if (mode === 'recent' && groupRecentBtn) groupRecentBtn.classList.add('active');
     if (mode === 'date' && groupDateBtn) groupDateBtn.classList.add('active');
     if (mode === 'workspace' && groupWorkspaceBtn) groupWorkspaceBtn.classList.add('active');
+    if (mode === 'archived' && groupArchivedBtn) groupArchivedBtn.classList.add('active');
 
     collapsedGroups.clear();
     renderList();
@@ -116,6 +119,9 @@
   }
   if (groupWorkspaceBtn) {
     groupWorkspaceBtn.addEventListener('click', () => setGroupMode('workspace'));
+  }
+  if (groupArchivedBtn) {
+    groupArchivedBtn.addEventListener('click', () => setGroupMode('archived'));
   }
 
   // Expand / Collapse all
@@ -141,6 +147,7 @@
           if (msg.convDir) { convDataDir = msg.convDir; }
           if (msg.activeWorkspace !== undefined) { currentWorkspace = msg.activeWorkspace; }
           if (msg.activeWorkspaceName !== undefined) { currentWorkspaceName = msg.activeWorkspaceName; }
+          if (msg.archivedIds) { archivedIds = new Set(msg.archivedIds); }
           if (rescueBtn) {
             rescueBtn.disabled = false;
             rescueBtn.textContent = '🛟 Rescatar';
@@ -234,16 +241,16 @@
 
   // ── Render ──
   function renderList() {
-    const entries = Object.entries(conversations);
+    const allEntries = Object.entries(conversations);
 
-    if (entries.length === 0) {
+    if (allEntries.length === 0) {
       listContainer.innerHTML = getEmptyStateHtml();
       statsBar.innerHTML = '';
       return;
     }
 
     // Filter by search
-    const filtered = entries.filter(([_, info]) => {
+    const searchFiltered = allEntries.filter(([_, info]) => {
       if (!searchQuery) return true;
       const title = (info.summary || '').toLowerCase();
       const wsList = [
@@ -253,12 +260,30 @@
       return title.includes(searchQuery) || wsList.includes(searchQuery);
     });
 
-    const totalInWs = entries.filter(([_, info]) => matchesWorkspace(info, currentWorkspace)).length;
+    const entries = groupMode === 'archived'
+      ? searchFiltered.filter(([cid]) => archivedIds.has(cid))
+      : searchFiltered.filter(([cid]) => !archivedIds.has(cid));
+
+    const totalInWs = allEntries.filter(([cid, info]) => !archivedIds.has(cid) && matchesWorkspace(info, currentWorkspace)).length;
+    const totalArchived = allEntries.filter(([cid]) => archivedIds.has(cid)).length;
     const wsDisplay = currentWorkspaceName || (currentWorkspace ? currentWorkspace.split(/[\\/]/).pop() : 'Proyecto');
 
     let groups;
-    if (groupMode === 'current-ws') {
-      const wsFiltered = filtered.filter(([_, info]) => matchesWorkspace(info, currentWorkspace));
+    if (groupMode === 'archived') {
+      if (entries.length === 0) {
+        listContainer.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📦</div>
+            <div class="empty-state-title">No hay conversaciones archivadas</div>
+            <div class="empty-state-desc">Puedes archivar cualquier conversación usando el botón <strong>📦 Archivar</strong> en su tarjeta.</div>
+          </div>`;
+        statsBar.innerHTML = `<span class="stat-chip active">📦 Archivados: <strong>0</strong></span> <span class="stat-chip">Total activos: ${allEntries.length - totalArchived} chats</span>`;
+        return;
+      }
+      groups = groupByRecent(entries);
+      statsBar.innerHTML = `<span class="stat-chip active">📦 Archivados: <strong>${entries.length}</strong></span> <span class="stat-chip">Total activos: ${allEntries.length - totalArchived} chats</span>`;
+    } else if (groupMode === 'current-ws') {
+      const wsFiltered = entries.filter(([_, info]) => matchesWorkspace(info, currentWorkspace));
       if (wsFiltered.length === 0) {
         listContainer.innerHTML = `
           <div class="empty-state">
@@ -266,21 +291,21 @@
             <div class="empty-state-title">No hay conversaciones para ${esc(wsDisplay)}</div>
             <div class="empty-state-desc">No se encontraron conversaciones para la carpeta abierta actualmente.${searchQuery ? ' Intenta limpiar la búsqueda.' : ' Puedes consultar todas las conversaciones en la pestaña <strong>🕒 Todos los Recientes</strong>.'}</div>
           </div>`;
-        statsBar.innerHTML = `<span class="stat-chip active">📂 ${esc(wsDisplay)}: <strong>0</strong> chats</span> <span class="stat-chip">Total global: ${entries.length} chats</span>`;
+        statsBar.innerHTML = `<span class="stat-chip active">📂 ${esc(wsDisplay)}: <strong>0</strong> chats</span> <span class="stat-chip">Total activos: ${allEntries.length - totalArchived}</span> ${totalArchived ? `<span class="stat-chip">📦 Archivados: ${totalArchived}</span>` : ''}`;
         return;
       }
       groups = groupByRecent(wsFiltered);
-      statsBar.innerHTML = `<span class="stat-chip active">📂 ${esc(wsDisplay)}: <strong>${wsFiltered.length}</strong> chats</span> <span class="stat-chip">Total global: ${entries.length} chats</span>`;
+      statsBar.innerHTML = `<span class="stat-chip active">📂 ${esc(wsDisplay)}: <strong>${wsFiltered.length}</strong> chats</span> <span class="stat-chip">Total activos: ${allEntries.length - totalArchived}</span> ${totalArchived ? `<span class="stat-chip">📦 Archivados: ${totalArchived}</span>` : ''}`;
     } else if (groupMode === 'workspace') {
-      groups = groupByWorkspace(filtered);
-      statsBar.innerHTML = `<span class="stat-chip">Proyectos: <strong>${groups.size}</strong></span> <span class="stat-chip">Conversaciones: ${filtered.length} de ${entries.length}</span>`;
+      groups = groupByWorkspace(entries);
+      statsBar.innerHTML = `<span class="stat-chip">Proyectos: <strong>${groups.size}</strong></span> <span class="stat-chip">Conversaciones: ${entries.length} de ${allEntries.length - totalArchived}</span>`;
     } else if (groupMode === 'date') {
-      groups = groupByDate(filtered);
-      statsBar.innerHTML = `<span class="stat-chip">Periodos: <strong>${groups.size}</strong></span> <span class="stat-chip">Conversaciones: ${filtered.length} de ${entries.length}</span>`;
+      groups = groupByDate(entries);
+      statsBar.innerHTML = `<span class="stat-chip">Periodos: <strong>${groups.size}</strong></span> <span class="stat-chip">Conversaciones: ${entries.length} de ${allEntries.length - totalArchived}</span>`;
     } else {
       // 'recent'
-      groups = groupByRecent(filtered);
-      statsBar.innerHTML = `<span class="stat-chip active">🕒 Todos los Recientes: <strong>${filtered.length}</strong> de ${entries.length}</span> ${currentWorkspace ? `<span class="stat-chip">📂 En ${esc(wsDisplay)}: ${totalInWs}</span>` : ''}`;
+      groups = groupByRecent(entries);
+      statsBar.innerHTML = `<span class="stat-chip active">🕒 Todos los Recientes: <strong>${entries.length}</strong></span> ${currentWorkspace ? `<span class="stat-chip">📂 En ${esc(wsDisplay)}: ${totalInWs}</span>` : ''} ${totalArchived ? `<span class="stat-chip">📦 Archivados: ${totalArchived}</span>` : ''}`;
     }
 
     let html = '';
@@ -308,6 +333,9 @@
     const time = formatTime(info.lastUserInputTime || info.lastModifiedTime || info.createdTime);
     const status = info.status || '';
     const statusDot = getStatusDot(status);
+    const isArchived = archivedIds.has(cascadeId);
+    const archiveBtnText = isArchived ? '📂 Desarchivar' : '📦 Archivar';
+    const archiveBtnTitle = isArchived ? 'Restaurar conversación a activos' : 'Archivar conversación';
 
     const workspaces = [
       ...(info.workspaces || []),
@@ -324,7 +352,7 @@
       : '';
 
     return `
-      <div class="conv-card" data-cascade-id="${esc(cascadeId)}">
+      <div class="conv-card${isArchived ? ' archived' : ''}" data-cascade-id="${esc(cascadeId)}">
         <div class="conv-icon">${statusDot}</div>
         <div class="conv-body">
           <div class="conv-header-row">
@@ -336,6 +364,7 @@
             <button class="btn-action btn-format" data-action="exportMd" data-id="${esc(cascadeId)}" title="Exportar a Markdown">📝 MD</button>
             <button class="btn-action btn-format" data-action="exportJson" data-id="${esc(cascadeId)}" title="Exportar a JSON">⚙️ JSON</button>
             <button class="btn-action btn-format" data-action="copyId" data-id="${esc(cascadeId)}" title="Copiar ID de conversación">📋 ID</button>
+            <button class="btn-action btn-format" data-action="toggleArchive" data-id="${esc(cascadeId)}" title="${archiveBtnTitle}">${archiveBtnText}</button>
           </div>
           <div class="conv-footer-row">
             <span class="conv-meta-item conv-time">🕒 ${time}</span>
@@ -367,6 +396,8 @@
         } else if (action === 'copyId') {
           vscode.postMessage({ command: 'copyId', cascadeId });
           showToast('Copied!');
+        } else if (action === 'toggleArchive') {
+          vscode.postMessage({ command: 'toggleArchive', cascadeId });
         } else if (action === 'openFolder') {
           const folderPath = btn.getAttribute('data-path');
           if (folderPath) {

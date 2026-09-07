@@ -4,6 +4,15 @@ All notable changes to the **Antigravity Webview History & Resume** extension wi
 
 ---
 
+## [0.3.8] - 2026-09-06
+
+### Added
+- 📋 **Copia Automática del Título al Reanudar**: Al presionar `▶ Reanudar`, se copia al portapapeles el título exacto de la conversación. Al abrir el reloj (*Past Conversations* / `Ctrl + Y`) y pegar (`Ctrl + V`), el filtro de búsqueda nativo coincide al 100% de forma inmediata (resolviendo el fallo de búsqueda por UUID).
+- 📦 **Sistema de Archivado (`📦 Archivar` / `📂 Desarchivar`)**: Posibilidad de archivar cualquier conversación para despejar las vistas principales sin borrar datos en disco. Nueva pestaña dedicada `📦 Archivados` en la barra superior y sincronización con las anotaciones del Language Server (`archived: true/false`).
+- 🔄 **Restitución Automática en Memoria**: Si un chat archivado o retirado de la memoria del Agente se reanuda, la extensión lo desarchiva, sincroniza sus archivos en disco y fuerza su reactivación en el Language Server (`LoadTrajectory`).
+
+---
+
 ## [0.3.7] - 2026-09-06
 
 ### Fixed

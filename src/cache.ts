@@ -17,6 +17,7 @@ interface CacheData {
   version: 1;
   updatedAt: string;
   conversations: Record<string, TrajectorySummary>;
+  archivedIds?: string[];
 }
 
 /**
@@ -35,18 +36,39 @@ export function readCache(): Record<string, TrajectorySummary> {
 }
 
 /**
- * Write conversation summaries to cache.
+ * Read archived conversation IDs from cache.
  */
-export function writeCache(conversations: Record<string, TrajectorySummary>): void {
+export function readArchivedIds(): Set<string> {
+  try {
+    if (!fs.existsSync(CACHE_FILE)) { return new Set(); }
+    const raw = fs.readFileSync(CACHE_FILE, 'utf-8');
+    const data: CacheData = JSON.parse(raw);
+    return new Set(data.archivedIds || []);
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Write conversation summaries and optional archived IDs to cache.
+ */
+export function writeCache(
+  conversations: Record<string, TrajectorySummary>,
+  archivedIds?: Set<string>,
+): void {
   try {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
+    // Preserve existing archivedIds if not provided
+    const existingArchived = archivedIds ? Array.from(archivedIds) : Array.from(readArchivedIds());
     const data: CacheData = {
       version: 1,
       updatedAt: new Date().toISOString(),
       conversations,
+      archivedIds: existingArchived,
     };
     fs.writeFileSync(CACHE_FILE, JSON.stringify(data), 'utf-8');
   } catch {
     // Silently ignore write failures
   }
 }
+

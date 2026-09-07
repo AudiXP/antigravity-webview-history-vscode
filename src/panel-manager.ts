@@ -12,7 +12,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { discoverAndListAll, getAllTrajectories, getTrajectorySteps, callApi, TrajectorySummary } from './ls-client.js';
 import { recoverUnindexed, syncCascadeFiles, syncAllConversations } from './recovery.js';
-import { readCache, writeCache } from './cache.js';
+import { readCache, writeCache, readArchivedIds } from './cache.js';
 import { parseSteps, FieldLevel } from './parser.js';
 import {
   formatMarkdown,
@@ -26,6 +26,7 @@ let currentPanel: vscode.WebviewPanel | undefined;
 let currentSidebarView: vscode.WebviewView | undefined;
 let cachedEndpointMap: Record<string, { port: number; csrf: string }> = {};
 let cachedConversations: Record<string, TrajectorySummary> = {};
+let cachedArchivedIds: Set<string> = readArchivedIds();
 
 export function openPanel(context: vscode.ExtensionContext): void {
   if (currentPanel) {
@@ -99,6 +100,9 @@ function setupWebviewMessageHandler(webview: vscode.Webview, subscriptions: vsco
           break;
         case 'resumeChat':
           await handleResumeChat(message.cascadeId);
+          break;
+        case 'toggleArchive':
+          await handleToggleArchive(message.cascadeId);
           break;
         case 'export':
           await handleExport(message.cascadeId, message.format);
@@ -182,6 +186,7 @@ function sendConversationsToWebview(targetWebview?: vscode.Webview): void {
     convDir: getConvDir(),
     activeWorkspace,
     activeWorkspaceName,
+    archivedIds: Array.from(cachedArchivedIds),
   }, targetWebview);
 }
 
@@ -259,7 +264,7 @@ async function handleRefresh(targetWebview?: vscode.Webview): Promise<void> {
     }
 
     // Step 5: Persist to disk cache
-    writeCache(cachedConversations);
+    writeCache(cachedConversations, cachedArchivedIds);
   } catch (e) {
     postMessage({ command: 'error', text: `Discovery failed: ${e}` }, targetWebview);
   }
@@ -513,10 +518,16 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
   if (!cascadeId) { return; }
 
   // 1. Sincronizar archivos del chat entre todos los directorios de conversaciones conocidos
-  // para que cualquier Language Server (con --app_data_dir antigravity o antigravity-ide) pueda leerlo
   syncCascadeFiles(cascadeId, getConvDirs());
 
-  // 2. Descubrir todos los Language Servers activos
+  // 2. Si estaba archivada localmente, desarchivarla y restituirla
+  if (cachedArchivedIds.has(cascadeId)) {
+    cachedArchivedIds.delete(cascadeId);
+    writeCache(cachedConversations, cachedArchivedIds);
+    sendConversationsToWebview();
+  }
+
+  // 3. Descubrir todos los Language Servers activos
   let allEndpoints: Array<{ port: number; csrf: string }> = [];
   try {
     const refreshed = await discoverAndListAll();
@@ -531,19 +542,19 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
     allEndpoints.push(cachedEndpointMap[cascadeId]);
   }
 
-  // 3. Hot-activation: forzar a TODOS los Language Servers activos a cargar el chat en memoria y actualizar su última visualización
+  // 4. Hot-activation: forzar carga en memoria y actualizar estado en el Language Server
   const nowIso = new Date().toISOString();
   await Promise.all(
     allEndpoints.map(async (ep) => {
       try {
         await getTrajectorySteps(ep.port, ep.csrf, cascadeId, 1);
         await callApi(ep.port, ep.csrf, 'LoadTrajectory', { cascadeId }, 2000).catch(() => {});
-        // Actualizar lastUserViewTime para posicionar este chat en el puesto #1 del Agent View
         await callApi(ep.port, ep.csrf, 'UpdateConversationAnnotations', {
           cascadeId,
           mergeAnnotations: true,
           annotations: {
             lastUserViewTime: nowIso,
+            archived: false,
           },
         }, 2000).catch(() => {});
       } catch (e) {
@@ -552,55 +563,34 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
     }),
   );
 
-  // 4. Copy cascadeId to clipboard for convenient reference
+  // 5. Copiar el TÍTULO EXACTO al portapapeles para filtrado 100% preciso en el reloj (Ctrl+V)
+  const conv = cachedConversations[cascadeId];
+  const chatTitle = conv?.summary || `Conversación ${cascadeId.slice(0, 8)}`;
   try {
-    await vscode.env.clipboard.writeText(cascadeId);
+    await vscode.env.clipboard.writeText(chatTitle);
   } catch {
     // ignore
   }
 
-  // 5. Open Antigravity Agent chat panel
+  // 6. Abrir panel del Agente
   try {
     await vscode.commands.executeCommand('antigravity.openChatView');
   } catch {
     // fallback
   }
 
-  // 6. Open native conversation picker (where this chat is now top of the Recent list)
+  // 7. Abrir selector de historial (reloj)
   try {
-    await vscode.commands.executeCommand('openConvoPicker');
+    await vscode.commands.executeCommand('openConversationHistory');
   } catch {
     try {
-      await vscode.commands.executeCommand('openConversationPicker');
+      await vscode.commands.executeCommand('openConvoPicker');
     } catch {
       // ignore
     }
   }
 
-  // 7. Opción A: Simulación de confirmación automática de teclado
-  setTimeout(async () => {
-    try {
-      await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem');
-    } catch {
-      // fallback
-    }
-    try {
-      await vscode.commands.executeCommand('openTrajectory');
-    } catch {
-      // fallback
-    }
-  }, 200);
-
-  setTimeout(async () => {
-    try {
-      await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem');
-    } catch {
-      // fallback
-    }
-  }, 450);
-
-  // 8. Verificar correspondencia de workspace
-  const conv = cachedConversations[cascadeId];
+  // 8. Verificar correspondencia de workspace y emitir notificación toast
   const convWsUri = conv?.workspaces?.[0]?.workspaceFolderAbsoluteUri;
   const currentFolders = (vscode.workspace.workspaceFolders || []).map((f) => path.resolve(f.uri.fsPath).toLowerCase());
 
@@ -618,10 +608,39 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
 
   if (isDifferentWs && targetFolder) {
     const folderName = path.basename(targetFolder);
-    postMessage({ command: 'toast', text: `⚠️ Chat reactivado. Pertenece al proyecto "${folderName}"` });
+    postMessage({ command: 'toast', text: `Título copiado 📋 Pertenece al proyecto "${folderName}"` });
   } else {
-    postMessage({ command: 'toast', text: 'Chat reactivado en memoria ✅ Ábrelo con Ctrl+Y o en el Agente' });
+    postMessage({ command: 'toast', text: `Título copiado 📋 Pégalo con Ctrl+V en el reloj del Agente ✅` });
   }
+}
+
+async function handleToggleArchive(cascadeId: string): Promise<void> {
+  if (!cascadeId) { return; }
+  const isArchived = cachedArchivedIds.has(cascadeId);
+  if (isArchived) {
+    cachedArchivedIds.delete(cascadeId);
+  } else {
+    cachedArchivedIds.add(cascadeId);
+  }
+  writeCache(cachedConversations, cachedArchivedIds);
+  sendConversationsToWebview();
+
+  // Informar al Language Server si hay endpoints disponibles
+  const ep = cachedEndpointMap[cascadeId] || Object.values(cachedEndpointMap)[0];
+  if (ep) {
+    callApi(ep.port, ep.csrf, 'UpdateConversationAnnotations', {
+      cascadeId,
+      mergeAnnotations: true,
+      annotations: {
+        archived: !isArchived,
+      },
+    }, 2000).catch(() => {});
+  }
+
+  postMessage({
+    command: 'toast',
+    text: !isArchived ? 'Conversación archivada 📦' : 'Conversación desarchivada 📂',
+  });
 }
 
 function postMessage(msg: Record<string, unknown>, targetWebview?: vscode.Webview): void {
@@ -685,6 +704,7 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
           <button class="seg-btn" id="group-recent" title="Todas las conversaciones ordenadas por recientes">🕒 Todos los Recientes</button>
           <button class="seg-btn" id="group-date" title="Agrupadas por fecha">📅 Por Fecha</button>
           <button class="seg-btn" id="group-workspace" title="Agrupadas por workspace">📁 Por Proyecto</button>
+          <button class="seg-btn" id="group-archived" title="Conversaciones archivadas">📦 Archivados</button>
         </div>
         <div class="segmented-control expand-collapse-ctrl">
           <button class="seg-btn" id="btn-expand-all" title="Desplegar todos los grupos">▾</button>
