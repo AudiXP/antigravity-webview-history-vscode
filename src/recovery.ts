@@ -50,6 +50,51 @@ export function scanDiskFiles(convDirs: string[]): string[] {
 export const scanPbFiles = scanDiskFiles;
 
 /**
+ * Sync files for a given cascadeId across all existing conversation directories.
+ * Ensures that if a .db or .pb exists in ~/.gemini/antigravity/ it is also present
+ * in ~/.gemini/antigravity-ide/ (and vice versa) so any running Language Server
+ * regardless of its --app_data_dir can access and activate it.
+ */
+export function syncCascadeFiles(cascadeId: string, convDirs: string[]): void {
+  if (convDirs.length <= 1) { return; }
+  const extensions = ['.db', '.db-wal', '.db-shm', '.pb'];
+  for (const ext of extensions) {
+    const filename = `${cascadeId}${ext}`;
+    let sourcePath: string | null = null;
+    for (const dir of convDirs) {
+      const full = path.join(dir, filename);
+      if (fs.existsSync(full)) {
+        sourcePath = full;
+        break;
+      }
+    }
+    if (sourcePath) {
+      for (const dir of convDirs) {
+        const dest = path.join(dir, filename);
+        if (!fs.existsSync(dest)) {
+          try {
+            fs.copyFileSync(sourcePath, dest);
+          } catch {
+            // ignore copy errors
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Sync all conversation files across all known conversation directories.
+ */
+export function syncAllConversations(convDirs: string[]): void {
+  if (convDirs.length <= 1) { return; }
+  const ids = scanDiskFiles(convDirs);
+  for (const id of ids) {
+    syncCascadeFiles(id, convDirs);
+  }
+}
+
+/**
  * Recover unindexed conversations by triggering on-demand loading.
  *
  * @param indexedIds Set of already-indexed cascade IDs
@@ -68,6 +113,9 @@ export async function recoverUnindexed(
   if (convDirs.length === 0 || endpoints.length === 0) {
     return { activated: 0, failed: 0, total: 0 };
   }
+
+  // Pre-sync all conversation files across directories
+  syncAllConversations(convDirs);
 
   const allDiskIds = scanDiskFiles(convDirs);
   const targets = forceAll ? allDiskIds : allDiskIds.filter((id) => !indexedIds.has(id));

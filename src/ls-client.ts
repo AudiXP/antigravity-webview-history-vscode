@@ -104,9 +104,9 @@ export function callApi(
 export async function getAllTrajectories(
   port: number,
   csrf: string,
-): Promise<Record<string, TrajectorySummary>> {
+): Promise<Record<string, TrajectorySummary> | null> {
   const result = await callApi(port, csrf, 'GetAllCascadeTrajectories', {}, 3000);
-  if (!result) {return {};}
+  if (!result) { return null; }
   return (result.trajectorySummaries as Record<string, TrajectorySummary>) || {};
 }
 
@@ -124,7 +124,7 @@ export async function discoverAndListAll(): Promise<{
   const endpoints: LsEndpoint[] = [];
   const seenPorts = new Set<number>();
 
-  // Build all probe tasks (first port per process)
+  // Build all probe tasks for each process port
   const probeTasks: Array<{ srv: LsProcess; port: number }> = [];
   for (const srv of servers) {
     const ports = findPorts(srv.pid);
@@ -132,12 +132,11 @@ export async function discoverAndListAll(): Promise<{
       if (!seenPorts.has(port)) {
         probeTasks.push({ srv, port });
         seenPorts.add(port);
-        break; // One port per process to probe
       }
     }
   }
 
-  // Query all LS instances in parallel (like Python ThreadPoolExecutor)
+  // Query all LS ports in parallel
   const results = await Promise.all(
     probeTasks.map(async ({ srv, port }) => {
       const summaries = await getAllTrajectories(port, srv.csrf);
@@ -145,9 +144,13 @@ export async function discoverAndListAll(): Promise<{
     }),
   );
 
+  const seenPids = new Set<number>();
   for (const { srv, port, summaries } of results) {
-    if (Object.keys(summaries).length > 0) {
-      endpoints.push({ port, csrf: srv.csrf, pid: srv.pid });
+    if (summaries !== null) {
+      if (!seenPids.has(srv.pid)) {
+        endpoints.push({ port, csrf: srv.csrf, pid: srv.pid });
+        seenPids.add(srv.pid);
+      }
       for (const [cid, info] of Object.entries(summaries)) {
         if (!(cid in conversations)) {
           conversations[cid] = info;

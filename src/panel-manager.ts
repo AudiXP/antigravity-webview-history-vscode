@@ -11,7 +11,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { discoverAndListAll, getAllTrajectories, getTrajectorySteps, callApi, TrajectorySummary } from './ls-client.js';
-import { recoverUnindexed } from './recovery.js';
+import { recoverUnindexed, syncCascadeFiles, syncAllConversations } from './recovery.js';
 import { readCache, writeCache } from './cache.js';
 import { parseSteps, FieldLevel } from './parser.js';
 import {
@@ -357,6 +357,9 @@ async function handleRescueOrphans(targetWebview?: vscode.Webview): Promise<void
       return;
     }
 
+    // Sync all conversation files across directories before rescue
+    syncAllConversations(getConvDirs());
+
     const indexedIds = new Set(Object.keys(cachedConversations));
     const epList = discovery.endpoints.map((e) => ({ port: e.port, csrf: e.csrf }));
 
@@ -389,39 +392,45 @@ async function handleRescueOrphans(targetWebview?: vscode.Webview): Promise<void
 async function handleResumeChat(cascadeId: string): Promise<void> {
   if (!cascadeId) { return; }
 
-  let ep = cachedEndpointMap[cascadeId];
-  if (!ep) {
-    try {
-      const refreshed = await discoverAndListAll();
-      cachedEndpointMap = refreshed.cascadeToEndpoint;
-      ep = cachedEndpointMap[cascadeId];
-      if (!ep && refreshed.endpoints.length > 0) {
-        ep = { port: refreshed.endpoints[0].port, csrf: refreshed.endpoints[0].csrf };
+  // 1. Sincronizar archivos del chat entre todos los directorios de conversaciones conocidos
+  // para que cualquier Language Server (con --app_data_dir antigravity o antigravity-ide) pueda leerlo
+  syncCascadeFiles(cascadeId, getConvDirs());
+
+  // 2. Descubrir todos los Language Servers activos
+  let allEndpoints: Array<{ port: number; csrf: string }> = [];
+  try {
+    const refreshed = await discoverAndListAll();
+    cachedEndpointMap = refreshed.cascadeToEndpoint;
+    cachedConversations = { ...cachedConversations, ...refreshed.conversations };
+    allEndpoints = refreshed.endpoints;
+  } catch (e) {
+    console.warn('Error discovering endpoints for resume:', e);
+  }
+
+  if (allEndpoints.length === 0 && cachedEndpointMap[cascadeId]) {
+    allEndpoints.push(cachedEndpointMap[cascadeId]);
+  }
+
+  // 3. Hot-activation: forzar a TODOS los Language Servers activos a cargar el chat en memoria
+  await Promise.all(
+    allEndpoints.map(async (ep) => {
+      try {
+        await getTrajectorySteps(ep.port, ep.csrf, cascadeId, 1);
+        await callApi(ep.port, ep.csrf, 'LoadTrajectory', { cascadeId }, 2000).catch(() => {});
+      } catch (e) {
+        console.warn(`Hot-activation error on port ${ep.port}:`, e);
       }
-    } catch (e) {
-      console.warn('Error refreshing endpoints for resume:', e);
-    }
-  }
+    }),
+  );
 
-  if (ep) {
-    try {
-      // 1. Hot-activation: force LanguageServer to load .db into memory buffer
-      await getTrajectorySteps(ep.port, ep.csrf, cascadeId, 1);
-      // Also notify LoadTrajectory if possible
-      callApi(ep.port, ep.csrf, 'LoadTrajectory', { cascadeId }, 2000).catch(() => {});
-    } catch (e) {
-      console.warn('Hot-activation error:', e);
-    }
-  }
-
-  // 2. Copy cascadeId to clipboard for convenient reference
+  // 4. Copy cascadeId to clipboard for convenient reference
   try {
     await vscode.env.clipboard.writeText(cascadeId);
   } catch {
     // ignore
   }
 
-  // 3. Open Antigravity Agent chat panel
+  // 5. Open Antigravity Agent chat panel
   try {
     await vscode.commands.executeCommand('antigravity.openChatView');
   } catch {

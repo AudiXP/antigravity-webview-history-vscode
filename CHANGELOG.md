@@ -4,6 +4,15 @@ All notable changes to the **Antigravity Webview History & Resume** extension wi
 
 ---
 
+## [0.3.4] - 2026-09-06
+
+### Fixed
+- 🔄 **Sincronización Multi-Directorio**: Sincronización automática de archivos `.db` y `.pb` entre directorios duales (`~/.gemini/antigravity` y `~/.gemini/antigravity-ide`) para evitar error 500 al reanudar chats originados en versiones externas o CLI.
+- 📡 **Detección de Endpoints Vacíos**: Inclusión de Language Servers activos incluso cuando reportan 0 conversaciones en memoria, permitiendo registrar ventanas recién iniciadas.
+- ⚡ **Activación Broadcast**: Reanudación emitida concurrentemente a todas las instancias activas de Language Server para garantizar disponibilidad inmediata en la ventana activa.
+
+---
+
 ## [0.3.3] - 2026-09-06
 
 ### Fixed
