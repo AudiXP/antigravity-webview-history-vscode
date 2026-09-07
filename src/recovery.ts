@@ -58,22 +58,51 @@ export const scanPbFiles = scanDiskFiles;
 export function syncCascadeFiles(cascadeId: string, convDirs: string[]): void {
   if (convDirs.length <= 1) { return; }
   const extensions = ['.db', '.db-wal', '.db-shm', '.pb'];
+
   for (const ext of extensions) {
     const filename = `${cascadeId}${ext}`;
-    let sourcePath: string | null = null;
+    let bestSource: { path: string; size: number } | null = null;
+
+    // 1. Encontrar la copia existente con mayor tamaño en disco
     for (const dir of convDirs) {
       const full = path.join(dir, filename);
-      if (fs.existsSync(full)) {
-        sourcePath = full;
-        break;
+      try {
+        if (fs.existsSync(full)) {
+          const stats = fs.statSync(full);
+          if (!bestSource || stats.size > bestSource.size) {
+            bestSource = { path: full, size: stats.size };
+          }
+        }
+      } catch {
+        // ignore stat errors
       }
     }
-    if (sourcePath) {
+
+    // 2. Si encontramos una copia válida, sincronizar a los demás directorios.
+    // Si en el destino no existe, o existe pero está truncado/vaciado (tamaño menor), sobrescribir.
+    if (bestSource && bestSource.size > 0) {
       for (const dir of convDirs) {
         const dest = path.join(dir, filename);
-        if (!fs.existsSync(dest)) {
+        if (dest === bestSource.path) { continue; }
+
+        let shouldCopy = false;
+        try {
+          if (!fs.existsSync(dest)) {
+            shouldCopy = true;
+          } else {
+            const destStat = fs.statSync(dest);
+            // Si el destino es menor que el origen (ej: vaciado a 48KB vs 1.2MB real), sobrescribir
+            if (destStat.size < bestSource.size) {
+              shouldCopy = true;
+            }
+          }
+        } catch {
+          shouldCopy = true;
+        }
+
+        if (shouldCopy) {
           try {
-            fs.copyFileSync(sourcePath, dest);
+            fs.copyFileSync(bestSource.path, dest);
           } catch {
             // ignore copy errors
           }

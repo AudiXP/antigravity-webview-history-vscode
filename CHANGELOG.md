@@ -4,6 +4,14 @@ All notable changes to the **Antigravity Webview History & Resume** extension wi
 
 ---
 
+## [0.3.9] - 2026-09-06
+
+### Fixed
+- 🛟 **Restitución Robusta de Chats Vaciados/Borrados por el IDE**: Corrección del mecanismo de sincronización `syncCascadeFiles`. Antigravity IDE al borrar un chat vaciaba las tablas SQLite (`0 rows` / 48 KB) impidiendo su reapertura. Ahora la extensión compara tamaños de archivo e integridad, asegurando que la versión completa e intacta (1.2 MB / 79 pasos) sobrescriba siempre los archivos vaciados.
+- ⚡ **Despertado y Registro en Language Server**: Al reanudar, la extensión recarga automáticamente la base de datos restaurada mediante `GetCascadeTrajectorySteps` y registra la trayectoria con `LoadTrajectory` y `UpdateConversationAnnotations` (desarchivado y título sincronizado), apareciendo de inmediato en *Past Conversations*.
+
+---
+
 ## [0.3.8] - 2026-09-06
 
 ### Added

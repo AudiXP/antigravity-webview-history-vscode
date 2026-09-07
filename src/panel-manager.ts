@@ -544,6 +544,9 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
 
   // 4. Hot-activation: forzar carga en memoria y actualizar estado en el Language Server
   const nowIso = new Date().toISOString();
+  const conv = cachedConversations[cascadeId];
+  const chatTitle = conv?.summary || `Conversación ${cascadeId.slice(0, 8)}`;
+
   await Promise.all(
     allEndpoints.map(async (ep) => {
       try {
@@ -553,6 +556,7 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
           cascadeId,
           mergeAnnotations: true,
           annotations: {
+            title: chatTitle,
             lastUserViewTime: nowIso,
             archived: false,
           },
@@ -564,8 +568,6 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
   );
 
   // 5. Copiar el TÍTULO EXACTO al portapapeles para filtrado 100% preciso en el reloj (Ctrl+V)
-  const conv = cachedConversations[cascadeId];
-  const chatTitle = conv?.summary || `Conversación ${cascadeId.slice(0, 8)}`;
   try {
     await vscode.env.clipboard.writeText(chatTitle);
   } catch {
