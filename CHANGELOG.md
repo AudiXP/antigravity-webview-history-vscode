@@ -4,6 +4,22 @@ All notable changes to the **Antigravity Webview History & Resume** extension wi
 
 ---
 
+## [0.3.5] - 2026-09-06
+
+### Added
+- 📂 **Vista "Esta Carpeta" Predeterminada**: Filtra automáticamente y muestra solo las conversaciones del workspace activo actual (`vscode.workspace.workspaceFolders`), ordenadas por las más recientes primero.
+- ⚡ **Botón "Cargar en Agente"**: Permite precargar y calentar en lote las conversaciones del proyecto actual hacia el Language Server para que aparezcan disponibles en el selector de chats (`Search all convos...`).
+- 🔍 **Buscador Destacado con Botón Limpiar**: Barra de búsqueda a ancho completo en la parte superior con icono 🔍, tecla rápida `Esc` y botón `✕` para limpiar filtros al instante.
+
+### Changed
+- 🔄 **Reestructuración de Cabecera en 2 Niveles**: Barra de búsqueda arriba a ancho completo y fila inferior con selector de vistas (`[📂 Esta Carpeta]`, `[🕒 Todos los Recientes]`, etc.) y botones de acción.
+- 📋 **Acciones Rápidas Bajo el Título**: Los botones `[▶ Reanudar]`, `[MD]`, `[JSON]`, `[ID]` ahora se ubican limpiamente debajo del título de la conversación, dejando espacio completo para títulos extensos.
+
+### Fixed
+- 🐛 **Eliminación de Alertas Solapadas**: Se suprimió la alerta nativa duplicada de VS Code en la esquina inferior derecha y se rediseñó el mensaje flotante como una píldora estilizada centrada en la parte superior del webview.
+
+---
+
 ## [0.3.4] - 2026-09-06
 
 ### Fixed

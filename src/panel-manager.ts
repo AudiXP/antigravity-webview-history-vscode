@@ -94,6 +94,9 @@ function setupWebviewMessageHandler(webview: vscode.Webview, subscriptions: vsco
         case 'rescueOrphans':
           await handleRescueOrphans(webview);
           break;
+        case 'activateWorkspaceInAgent':
+          await handleActivateWorkspaceInAgent();
+          break;
         case 'resumeChat':
           await handleResumeChat(message.cascadeId);
           break;
@@ -166,13 +169,27 @@ export function rescueOrphansPanel(): void {
 
 // ── Handlers ──
 
+function sendConversationsToWebview(targetWebview?: vscode.Webview): void {
+  const ws = vscode.workspace.workspaceFolders?.[0];
+  const activeWorkspace = ws ? path.resolve(ws.uri.fsPath).toLowerCase() : '';
+  const activeWorkspaceName = ws ? ws.name : '';
+
+  postMessage({
+    command: 'setConversations',
+    data: cachedConversations,
+    convDir: getConvDir(),
+    activeWorkspace,
+    activeWorkspaceName,
+  }, targetWebview);
+}
+
 async function handleRefresh(targetWebview?: vscode.Webview): Promise<void> {
   try {
     // Step 0: Show cached data instantly (IDE restart scenario)
     const cached = readCache();
     if (Object.keys(cached).length > 0 && Object.keys(cachedConversations).length === 0) {
       cachedConversations = cached;
-      postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() }, targetWebview);
+      sendConversationsToWebview(targetWebview);
     }
 
     // Step 1: Discover LS instances and get indexed conversations
@@ -180,7 +197,7 @@ async function handleRefresh(targetWebview?: vscode.Webview): Promise<void> {
     cachedEndpointMap = result.cascadeToEndpoint;
     cachedConversations = { ...cachedConversations, ...result.conversations };
 
-    postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() }, targetWebview);
+    sendConversationsToWebview(targetWebview);
 
     // Send current export path to webview
     const exportDir = resolveExportPath(
@@ -205,7 +222,7 @@ async function handleRefresh(targetWebview?: vscode.Webview): Promise<void> {
         const refreshed = await discoverAndListAll();
         cachedEndpointMap = refreshed.cascadeToEndpoint;
         cachedConversations = { ...cachedConversations, ...refreshed.conversations };
-        postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() }, targetWebview);
+        sendConversationsToWebview(targetWebview);
         postMessage({ command: 'recoverDone', activated: recovery.activated, total: recovery.total }, targetWebview);
       }
     }
@@ -232,7 +249,7 @@ async function handleRefresh(targetWebview?: vscode.Webview): Promise<void> {
         delete cachedConversations[id];
         delete cachedEndpointMap[id];
       }
-      postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() }, targetWebview);
+      sendConversationsToWebview(targetWebview);
       vscode.window.showWarningMessage(
         `${cleanedIds.length} conversation(s) were auto-cleaned by Antigravity (100-limit). Consider using "Export All" to backup.`,
         'Export All',
@@ -378,7 +395,7 @@ async function handleRescueOrphans(targetWebview?: vscode.Webview): Promise<void
     cachedConversations = { ...cachedConversations, ...refreshed.conversations };
     writeCache(cachedConversations);
 
-    postMessage({ command: 'setConversations', data: cachedConversations, convDir: getConvDir() }, targetWebview);
+    sendConversationsToWebview(targetWebview);
     postMessage({ command: 'recoverDone', activated: recovery.activated, total: recovery.total }, targetWebview);
     postMessage({ command: 'toast', text: `🛟 Rescate finalizado: ${recovery.activated} conversaciones reactivadas ✅` }, targetWebview);
 
@@ -387,6 +404,88 @@ async function handleRescueOrphans(targetWebview?: vscode.Webview): Promise<void
     vscode.window.showErrorMessage(`Error en rescate de huérfanos: ${e}`);
     postMessage({ command: 'error', text: `Rescate falló: ${e}` }, targetWebview);
   }
+}
+
+async function handleActivateWorkspaceInAgent(): Promise<void> {
+  const ws = vscode.workspace.workspaceFolders?.[0];
+  if (!ws) {
+    vscode.window.showWarningMessage('No hay ninguna carpeta de workspace abierta en este momento.');
+    return;
+  }
+
+  const normTarget = path.resolve(ws.uri.fsPath).toLowerCase().replace(/\\/g, '/');
+  const targetIds: string[] = [];
+
+  for (const [cid, conv] of Object.entries(cachedConversations)) {
+    const rawConv = conv as Record<string, any>;
+    const wsUris: string[] = [
+      ...(conv.workspaces || []).map((w: { workspaceFolderAbsoluteUri?: string; gitRootAbsoluteUri?: string }) => w.workspaceFolderAbsoluteUri || w.gitRootAbsoluteUri || ''),
+      ...(rawConv.trajectoryMetadata?.workspaces || []).map((w: { workspaceFolderAbsoluteUri?: string; gitRootAbsoluteUri?: string }) => w.workspaceFolderAbsoluteUri || w.gitRootAbsoluteUri || ''),
+      ...(rawConv.trajectoryMetadata?.workspaceUris || []),
+    ].filter(Boolean);
+
+    const match = wsUris.some((uri) => {
+      const clean = decodeURIComponent(uri.replace(/^file:\/\/\/?/i, '')).toLowerCase().replace(/\\/g, '/');
+      return clean && (normTarget.includes(clean) || clean.includes(normTarget));
+    });
+
+    if (match) {
+      targetIds.push(cid);
+    }
+  }
+
+  if (targetIds.length === 0) {
+    postMessage({ command: 'toast', text: `No hay conversaciones registradas para "${ws.name}"` });
+    return;
+  }
+
+  postMessage({ command: 'toast', text: `⚡ Cargando ${targetIds.length} conversaciones de "${ws.name}" en el Agente...` });
+
+  // 1. Sincronizar archivos a través de directorios
+  for (const cid of targetIds) {
+    syncCascadeFiles(cid, getConvDirs());
+  }
+
+  // 2. Obtener endpoints activos
+  let endpoints: Array<{ port: number; csrf: string }> = [];
+  try {
+    const refreshed = await discoverAndListAll();
+    cachedEndpointMap = refreshed.cascadeToEndpoint;
+    cachedConversations = { ...cachedConversations, ...refreshed.conversations };
+    endpoints = refreshed.endpoints;
+  } catch (e) {
+    console.warn('Error during activate workspace discovery:', e);
+  }
+
+  if (endpoints.length === 0) {
+    postMessage({ command: 'toast', text: '⚠️ No se detectó Language Server activo' });
+    return;
+  }
+
+  // 3. Ordenar por más recientes y calentar las 30 más recientes
+  targetIds.sort((a, b) => {
+    const ta = cachedConversations[a]?.lastUserInputTime || cachedConversations[a]?.lastModifiedTime || cachedConversations[a]?.createdTime || '';
+    const tb = cachedConversations[b]?.lastUserInputTime || cachedConversations[b]?.lastModifiedTime || cachedConversations[b]?.createdTime || '';
+    return tb.localeCompare(ta);
+  });
+
+  const toActivate = targetIds.slice(0, 30);
+  for (const cid of toActivate) {
+    for (const ep of endpoints) {
+      getTrajectorySteps(ep.port, ep.csrf, cid, 1).catch(() => {});
+      callApi(ep.port, ep.csrf, 'LoadTrajectory', { cascadeId: cid }, 1500).catch(() => {});
+    }
+  }
+
+  const finalRefreshed = await discoverAndListAll().catch(() => null);
+  if (finalRefreshed) {
+    cachedEndpointMap = finalRefreshed.cascadeToEndpoint;
+    cachedConversations = { ...cachedConversations, ...finalRefreshed.conversations };
+    writeCache(cachedConversations);
+    sendConversationsToWebview();
+  }
+
+  postMessage({ command: 'toast', text: `⚡ ${toActivate.length} conversaciones de "${ws.name}" listas en el Agente ✅` });
 }
 
 async function handleResumeChat(cascadeId: string): Promise<void> {
@@ -437,7 +536,7 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
     // fallback
   }
 
-  // 4. Open native conversation picker (where this chat is now top of the Recent list)
+  // 6. Open native conversation picker (where this chat is now top of the Recent list)
   try {
     await vscode.commands.executeCommand('openConvoPicker');
   } catch {
@@ -448,7 +547,7 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
     }
   }
 
-  // 5. Opción A: Simulación de confirmación automática de teclado
+  // 7. Opción A: Simulación de confirmación automática de teclado
   setTimeout(async () => {
     try {
       await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem');
@@ -470,7 +569,7 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
     }
   }, 450);
 
-  // 6. Verificar correspondencia de workspace
+  // 8. Verificar correspondencia de workspace
   const conv = cachedConversations[cascadeId];
   const convWsUri = conv?.workspaces?.[0]?.workspaceFolderAbsoluteUri;
   const currentFolders = (vscode.workspace.workspaceFolders || []).map((f) => path.resolve(f.uri.fsPath).toLowerCase());
@@ -503,7 +602,6 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
     });
   } else {
     postMessage({ command: 'toast', text: `Chat en la cima de Recientes ✅ Haz clic en él en el panel del Agente` });
-    vscode.window.showInformationMessage(`Conversación ${cascadeId.slice(0, 8)} reactivada en la cima de Recientes. Haz clic sobre ella abajo en el panel del Agente.`);
   }
 }
 
@@ -553,20 +651,34 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
   <title>Antigravity History</title>
 </head>
 <body>
-  <div class="top-bar">
-    <input type="text" class="search-input" id="search-input" placeholder="Search conversations...">
-    <div class="segmented-control">
-      <button class="seg-btn active" id="group-recent">Recientes</button>
-      <button class="seg-btn" id="group-date">Fecha</button>
-      <button class="seg-btn" id="group-workspace">Workspace</button>
+  <div class="header-container">
+    <div class="search-section">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input" id="search-input" placeholder="Buscar conversaciones por título, ID o workspace... (Esc para limpiar)">
+        <button class="search-clear-btn" id="search-clear" title="Limpiar búsqueda" style="display:none;">✕</button>
+      </div>
     </div>
-    <div class="segmented-control">
-      <button class="seg-btn" id="btn-expand-all" title="Expand All">▾ Expand</button>
-      <button class="seg-btn" id="btn-collapse-all" title="Collapse All">▸ Collapse</button>
+    <div class="toolbar-section">
+      <div class="toolbar-left">
+        <div class="segmented-control">
+          <button class="seg-btn active" id="group-current-ws" title="Conversaciones del workspace abierto actualmente">📂 Esta Carpeta</button>
+          <button class="seg-btn" id="group-recent" title="Todas las conversaciones ordenadas por recientes">🕒 Todos los Recientes</button>
+          <button class="seg-btn" id="group-date" title="Agrupadas por fecha">📅 Por Fecha</button>
+          <button class="seg-btn" id="group-workspace" title="Agrupadas por workspace">📁 Por Proyecto</button>
+        </div>
+        <div class="segmented-control expand-collapse-ctrl">
+          <button class="seg-btn" id="btn-expand-all" title="Desplegar todos los grupos">▾</button>
+          <button class="seg-btn" id="btn-collapse-all" title="Colapsar todos los grupos">▸</button>
+        </div>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-rescue" id="btn-rescue" title="Escanear y sincronizar bases de datos huérfanas en disco">🛟 Rescatar</button>
+        <button class="btn btn-activate-ws" id="btn-activate-ws" title="Cargar y calentar conversaciones de esta carpeta en el Agente">⚡ Cargar en Agente</button>
+        <button class="btn btn-icon" id="btn-refresh" title="Actualizar">↻</button>
+        <button class="btn btn-primary" id="btn-export-all" title="Exportar todas las conversaciones">📦 Exportar Todo</button>
+      </div>
     </div>
-    <button class="btn btn-rescue" id="btn-rescue" title="Rescatar conversaciones huérfanas en disco">🛟 Rescatar</button>
-    <button class="btn btn-icon" id="btn-refresh" title="Refresh">↻</button>
-    <button class="btn btn-primary" id="btn-export-all">Export All</button>
   </div>
   <div class="stats-bar" id="stats-bar"></div>
   <div class="export-path-bar" id="export-path-bar"></div>

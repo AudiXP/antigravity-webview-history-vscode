@@ -21,7 +21,9 @@ export interface TrajectorySummary {
   lastModifiedTime?: string;
   lastUserInputTime?: string;
   status?: string;
-  workspaces?: Array<{ workspaceFolderAbsoluteUri?: string }>;
+  workspaces?: Array<{ workspaceFolderAbsoluteUri?: string; gitRootAbsoluteUri?: string }>;
+  trajectoryMetadata?: Record<string, any>;
+  [key: string]: unknown;
 }
 
 export interface TrajectoryStep {

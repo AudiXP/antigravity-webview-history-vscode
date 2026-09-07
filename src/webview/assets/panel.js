@@ -6,13 +6,16 @@
 
   // ── DOM refs ──
   const searchInput = document.getElementById('search-input');
+  const searchClearBtn = document.getElementById('search-clear');
   const rescueBtn = document.getElementById('btn-rescue');
+  const activateWsBtn = document.getElementById('btn-activate-ws');
   const refreshBtn = document.getElementById('btn-refresh');
   const exportAllBtn = document.getElementById('btn-export-all');
   const statsBar = document.getElementById('stats-bar');
   const listContainer = document.getElementById('list-container');
   const toastEl = document.getElementById('toast');
   const exportPathBar = document.getElementById('export-path-bar');
+  const groupCurrentWsBtn = document.getElementById('group-current-ws');
   const groupRecentBtn = document.getElementById('group-recent');
   const groupDateBtn = document.getElementById('group-date');
   const groupWorkspaceBtn = document.getElementById('group-workspace');
@@ -23,9 +26,11 @@
   // ── State ──
   let conversations = {};
   let searchQuery = '';
-  let groupMode = 'recent';
+  let groupMode = 'current-ws'; // Default to current-ws!
   let collapsedGroups = new Set();
   let convDataDir = '';
+  let currentWorkspace = '';
+  let currentWorkspaceName = '';
 
   // ── Init ──
   if (rescueBtn) {
@@ -33,6 +38,13 @@
       rescueBtn.disabled = true;
       rescueBtn.textContent = '🛟 Rescatando...';
       vscode.postMessage({ command: 'rescueOrphans' });
+    });
+  }
+
+  if (activateWsBtn) {
+    activateWsBtn.addEventListener('click', () => {
+      vscode.postMessage({ command: 'activateWorkspaceInAgent' });
+      showToast('Cargando conversaciones en el panel del Agente...');
     });
   }
 
@@ -55,43 +67,63 @@
     });
   }
 
-  if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      searchQuery = e.target.value.toLowerCase();
+  if (searchClearBtn) {
+    searchClearBtn.addEventListener('click', () => {
+      if (searchInput) { searchInput.value = ''; }
+      searchQuery = '';
+      searchClearBtn.style.display = 'none';
       renderList();
+      if (searchInput) { searchInput.focus(); }
     });
   }
 
-  // Segmented control
-  if (groupRecentBtn) {
-    groupRecentBtn.addEventListener('click', () => {
-      groupMode = 'recent';
-      groupRecentBtn.classList.add('active');
-      if (groupDateBtn) { groupDateBtn.classList.remove('active'); }
-      if (groupWorkspaceBtn) { groupWorkspaceBtn.classList.remove('active'); }
-      collapsedGroups.clear();
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      searchQuery = e.target.value.toLowerCase();
+      if (searchClearBtn) {
+        searchClearBtn.style.display = searchQuery ? 'inline-flex' : 'none';
+      }
       renderList();
     });
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        searchInput.value = '';
+        searchQuery = '';
+        if (searchClearBtn) { searchClearBtn.style.display = 'none'; }
+        renderList();
+      }
+    });
+  }
+
+  // Segmented control navigation
+  function setGroupMode(mode) {
+    groupMode = mode;
+    const allBtns = [groupCurrentWsBtn, groupRecentBtn, groupDateBtn, groupWorkspaceBtn];
+    allBtns.forEach((btn) => {
+      if (!btn) return;
+      btn.classList.remove('active');
+    });
+
+    if (mode === 'current-ws' && groupCurrentWsBtn) groupCurrentWsBtn.classList.add('active');
+    if (mode === 'recent' && groupRecentBtn) groupRecentBtn.classList.add('active');
+    if (mode === 'date' && groupDateBtn) groupDateBtn.classList.add('active');
+    if (mode === 'workspace' && groupWorkspaceBtn) groupWorkspaceBtn.classList.add('active');
+
+    collapsedGroups.clear();
+    renderList();
+  }
+
+  if (groupCurrentWsBtn) {
+    groupCurrentWsBtn.addEventListener('click', () => setGroupMode('current-ws'));
+  }
+  if (groupRecentBtn) {
+    groupRecentBtn.addEventListener('click', () => setGroupMode('recent'));
   }
   if (groupDateBtn) {
-    groupDateBtn.addEventListener('click', () => {
-      groupMode = 'date';
-      groupDateBtn.classList.add('active');
-      if (groupRecentBtn) { groupRecentBtn.classList.remove('active'); }
-      if (groupWorkspaceBtn) { groupWorkspaceBtn.classList.remove('active'); }
-      collapsedGroups.clear();
-      renderList();
-    });
+    groupDateBtn.addEventListener('click', () => setGroupMode('date'));
   }
   if (groupWorkspaceBtn) {
-    groupWorkspaceBtn.addEventListener('click', () => {
-      groupMode = 'workspace';
-      groupWorkspaceBtn.classList.add('active');
-      if (groupRecentBtn) { groupRecentBtn.classList.remove('active'); }
-      if (groupDateBtn) { groupDateBtn.classList.remove('active'); }
-      collapsedGroups.clear();
-      renderList();
-    });
+    groupWorkspaceBtn.addEventListener('click', () => setGroupMode('workspace'));
   }
 
   // Expand / Collapse all
@@ -115,6 +147,8 @@
         case 'setConversations':
           conversations = msg.data || {};
           if (msg.convDir) { convDataDir = msg.convDir; }
+          if (msg.activeWorkspace !== undefined) { currentWorkspace = msg.activeWorkspace; }
+          if (msg.activeWorkspaceName !== undefined) { currentWorkspaceName = msg.activeWorkspaceName; }
           if (rescueBtn) {
             rescueBtn.disabled = false;
             rescueBtn.textContent = '🛟 Rescatar';
@@ -178,35 +212,84 @@
     }
   });
 
+  // ── Workspace matcher ──
+  function matchesWorkspace(info, targetWs) {
+    if (!targetWs) return true;
+    const normTarget = targetWs.toLowerCase().replace(/\\/g, '/');
+
+    const wsList = [
+      ...(info.workspaces || []),
+      ...(info.trajectoryMetadata?.workspaces || []),
+    ].map((w) => w.workspaceFolderAbsoluteUri || w.gitRootAbsoluteUri).filter(Boolean);
+
+    if (wsList.some((uri) => {
+      const clean = decodeURIComponent(uri.replace(/^file:\/\/\/?/i, '')).toLowerCase().replace(/\\/g, '/');
+      return clean && (normTarget.includes(clean) || clean.includes(normTarget));
+    })) {
+      return true;
+    }
+
+    const uriList = info.trajectoryMetadata?.workspaceUris || [];
+    if (uriList.some((uri) => {
+      const clean = decodeURIComponent(uri.replace(/^file:\/\/\/?/i, '')).toLowerCase().replace(/\\/g, '/');
+      return clean && (normTarget.includes(clean) || clean.includes(normTarget));
+    })) {
+      return true;
+    }
+
+    return false;
+  }
+
   // ── Render ──
   function renderList() {
     const entries = Object.entries(conversations);
 
     if (entries.length === 0) {
       listContainer.innerHTML = getEmptyStateHtml();
-      statsBar.textContent = '';
+      statsBar.innerHTML = '';
       return;
     }
 
-    // Filter
+    // Filter by search
     const filtered = entries.filter(([_, info]) => {
       if (!searchQuery) return true;
-      return (info.summary || '').toLowerCase().includes(searchQuery);
+      const title = (info.summary || '').toLowerCase();
+      const wsList = [
+        ...(info.workspaces || []),
+        ...(info.trajectoryMetadata?.workspaces || []),
+      ].map((w) => w.workspaceFolderAbsoluteUri || '').join(' ').toLowerCase();
+      return title.includes(searchQuery) || wsList.includes(searchQuery);
     });
 
-    if (filtered.length === 0) {
-      listContainer.innerHTML = getNoResultsHtml(searchQuery);
-      statsBar.textContent = `${entries.length} conversations`;
-      return;
-    }
+    const totalInWs = entries.filter(([_, info]) => matchesWorkspace(info, currentWorkspace)).length;
+    const wsDisplay = currentWorkspaceName || (currentWorkspace ? currentWorkspace.split(/[\\/]/).pop() : 'Proyecto');
 
-    // Group
-    const groups = groupMode === 'workspace'
-      ? groupByWorkspace(filtered)
-      : groupMode === 'date'
-        ? groupByDate(filtered)
-        : groupByRecent(filtered);
-    statsBar.textContent = `${filtered.length} of ${entries.length} conversations`;
+    let groups;
+    if (groupMode === 'current-ws') {
+      const wsFiltered = filtered.filter(([_, info]) => matchesWorkspace(info, currentWorkspace));
+      if (wsFiltered.length === 0) {
+        listContainer.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📂</div>
+            <div class="empty-state-title">No hay conversaciones para ${esc(wsDisplay)}</div>
+            <div class="empty-state-desc">No se encontraron conversaciones para la carpeta abierta actualmente.${searchQuery ? ' Intenta limpiar la búsqueda.' : ' Puedes consultar todas las conversaciones en la pestaña <strong>🕒 Todos los Recientes</strong>.'}</div>
+          </div>`;
+        statsBar.innerHTML = `<span class="stat-chip active">📂 ${esc(wsDisplay)}: <strong>0</strong> chats</span> <span class="stat-chip">Total global: ${entries.length} chats</span>`;
+        return;
+      }
+      groups = groupByRecent(wsFiltered);
+      statsBar.innerHTML = `<span class="stat-chip active">📂 ${esc(wsDisplay)}: <strong>${wsFiltered.length}</strong> chats</span> <span class="stat-chip">Total global: ${entries.length} chats</span>`;
+    } else if (groupMode === 'workspace') {
+      groups = groupByWorkspace(filtered);
+      statsBar.innerHTML = `<span class="stat-chip">Proyectos: <strong>${groups.size}</strong></span> <span class="stat-chip">Conversaciones: ${filtered.length} de ${entries.length}</span>`;
+    } else if (groupMode === 'date') {
+      groups = groupByDate(filtered);
+      statsBar.innerHTML = `<span class="stat-chip">Periodos: <strong>${groups.size}</strong></span> <span class="stat-chip">Conversaciones: ${filtered.length} de ${entries.length}</span>`;
+    } else {
+      // 'recent'
+      groups = groupByRecent(filtered);
+      statsBar.innerHTML = `<span class="stat-chip active">🕒 Todos los Recientes: <strong>${filtered.length}</strong> de ${entries.length}</span> ${currentWorkspace ? `<span class="stat-chip">📂 En ${esc(wsDisplay)}: ${totalInWs}</span>` : ''}`;
+    }
 
     let html = '';
     for (const [label, items] of groups) {
@@ -230,39 +313,43 @@
   function renderCard(cascadeId, info) {
     const title = info.summary || 'Untitled Conversation';
     const stepCount = info.stepCount || '?';
-    const time = formatTime(info.lastModifiedTime || info.createdTime);
-    const created = formatCreatedDate(info.createdTime);
+    const time = formatTime(info.lastUserInputTime || info.lastModifiedTime || info.createdTime);
     const status = info.status || '';
     const statusDot = getStatusDot(status);
 
-    const workspaces = (info.workspaces || [])
-      .map((w) => w.workspaceFolderAbsoluteUri)
-      .filter(Boolean);
+    const workspaces = [
+      ...(info.workspaces || []),
+      ...(info.trajectoryMetadata?.workspaces || []),
+    ].map((w) => w.workspaceFolderAbsoluteUri || w.gitRootAbsoluteUri).filter(Boolean);
     const wsPath = workspaces.length > 0 ? workspaces[0] : '';
     const wsDisplay = toWinPath(stripFileUri(wsPath));
     const wsHtml = wsPath
-      ? `<div class="conv-workspace" data-action="openFolder" data-path="${esc(wsPath)}" title="Open workspace in Explorer">📂 ${esc(wsDisplay)}</div>`
+      ? `<span class="conv-meta-item conv-workspace" data-action="openFolder" data-path="${esc(wsPath)}" title="Abrir carpeta en Explorador">📂 ${esc(wsDisplay)}</span>`
       : '';
 
-    // Conversation data — show only folder name, click opens full path
     const convFileHtml = convDataDir
-      ? `<div class="conv-workspace" data-action="openFolder" data-path="${esc(convDataDir)}" title="${esc(toWinPath(convDataDir))}">💾 ${esc(cascadeId)}</div>`
+      ? `<span class="conv-meta-item conv-id-badge" data-action="copyId" data-id="${esc(cascadeId)}" title="Copiar ID: ${esc(cascadeId)}">🪪 ${esc(cascadeId.slice(0, 8))}</span>`
       : '';
 
     return `
       <div class="conv-card" data-cascade-id="${esc(cascadeId)}">
         <div class="conv-icon">${statusDot}</div>
-        <div class="conv-info">
-          <div class="conv-title" title="${esc(title)}">${esc(title)}</div>
-          <div class="conv-meta">${time} · ${stepCount} steps</div>
-          ${wsHtml}
-          ${convFileHtml}
-        </div>
-        <div class="conv-actions">
-          <button class="btn-export btn-resume" data-action="resumeChat" data-id="${esc(cascadeId)}" title="Reanudar conversación en Antigravity">▶ Reanudar</button>
-          <button class="btn-export" data-action="exportMd" data-id="${esc(cascadeId)}">MD</button>
-          <button class="btn-export" data-action="exportJson" data-id="${esc(cascadeId)}">JSON</button>
-          <button class="btn-export" data-action="copyId" data-id="${esc(cascadeId)}" title="Copy Cascade ID">ID</button>
+        <div class="conv-body">
+          <div class="conv-header-row">
+            <div class="conv-title" title="${esc(title)}">${esc(title)}</div>
+            <span class="conv-steps-badge">${stepCount} pasos</span>
+          </div>
+          <div class="conv-actions-row">
+            <button class="btn-action btn-resume" data-action="resumeChat" data-id="${esc(cascadeId)}" title="Reanudar en el Agente de Antigravity">▶ Reanudar</button>
+            <button class="btn-action btn-format" data-action="exportMd" data-id="${esc(cascadeId)}" title="Exportar a Markdown">📝 MD</button>
+            <button class="btn-action btn-format" data-action="exportJson" data-id="${esc(cascadeId)}" title="Exportar a JSON">⚙️ JSON</button>
+            <button class="btn-action btn-format" data-action="copyId" data-id="${esc(cascadeId)}" title="Copiar ID de conversación">📋 ID</button>
+          </div>
+          <div class="conv-footer-row">
+            <span class="conv-meta-item conv-time">🕒 ${time}</span>
+            ${wsHtml}
+            ${convFileHtml}
+          </div>
         </div>
       </div>
     `;
