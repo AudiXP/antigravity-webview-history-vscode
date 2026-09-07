@@ -29,7 +29,7 @@ export function activate(context: vscode.ExtensionContext) {
       rescueOrphansPanel();
     }),
     vscode.commands.registerCommand('aghistory.export', () => {
-      vscode.window.showInformationMessage('Use the panel to export individual conversations.');
+      openPanel(context);
     }),
     vscode.commands.registerCommand('aghistory.exportAll', () => {
       openPanel(context);

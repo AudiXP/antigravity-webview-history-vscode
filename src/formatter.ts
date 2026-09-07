@@ -173,16 +173,19 @@ export function writeConversation(
   outputDir: string,
   extension = '.md',
   timestamp?: string,
+  overwrite = true,
 ): string {
   const base = safeFilename(title);
   const suffix = timestamp ? `_${timestamp}` : '';
   let filepath = path.join(outputDir, base + suffix + extension);
 
-  // Deduplicate
-  let counter = 2;
-  while (fs.existsSync(filepath)) {
-    filepath = path.join(outputDir, `${base}${suffix}_${counter}${extension}`);
-    counter++;
+  // Deduplicate only if overwrite is false
+  if (!overwrite) {
+    let counter = 2;
+    while (fs.existsSync(filepath)) {
+      filepath = path.join(outputDir, `${base}${suffix}_${counter}${extension}`);
+      counter++;
+    }
   }
 
   fs.mkdirSync(outputDir, { recursive: true });

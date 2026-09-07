@@ -3,6 +3,7 @@ dist/
 *.vsix
 .vscode-test/
 out/
+antigravity_export/
 
 # Core modules (closed source)
 src/discovery.ts

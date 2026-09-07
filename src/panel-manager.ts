@@ -109,7 +109,7 @@ function setupWebviewMessageHandler(webview: vscode.Webview, subscriptions: vsco
         case 'copyId':
           if (message.cascadeId) {
             await vscode.env.clipboard.writeText(message.cascadeId);
-            vscode.window.showInformationMessage('Cascade ID copied!');
+            postMessage({ command: 'toast', text: '📋 ID copiado al portapapeles' });
           }
           break;
         case 'openInExplorer': {
@@ -252,12 +252,10 @@ async function handleRefresh(targetWebview?: vscode.Webview): Promise<void> {
         delete cachedEndpointMap[id];
       }
       sendConversationsToWebview(targetWebview);
-      vscode.window.showWarningMessage(
-        `${cleanedIds.length} conversation(s) were auto-cleaned by Antigravity (100-limit). Consider using "Export All" to backup.`,
-        'Export All',
-      ).then((choice) => {
-        if (choice === 'Export All') { handleExportAll(); }
-      });
+      postMessage({
+        command: 'toast',
+        text: `⚠️ ${cleanedIds.length} conversación(es) limpiadas por Antigravity (límite 100). Usa Exportar Todo para respaldar.`,
+      }, targetWebview);
     }
 
     // Step 5: Persist to disk cache
@@ -275,7 +273,7 @@ async function handleExport(cascadeId: string, format: string): Promise<void> {
     if (anyId) { ep = cachedEndpointMap[anyId]; }
   }
   if (!ep) {
-    vscode.window.showErrorMessage('No LS endpoint available. Try refreshing.');
+    postMessage({ command: 'toast', text: '⚠️ No hay conexión con Language Server. Pulsa ↻' });
     return;
   }
 
@@ -295,11 +293,11 @@ async function handleExport(cascadeId: string, format: string): Promise<void> {
 
     if (format === 'md' || format === 'all') {
       const md = formatMarkdown(title, cascadeId, metadata, messages);
-      const mdPath = writeConversation(md, title, outputDir, '.md');
+      const mdPath = writeConversation(md, title, outputDir, '.md', undefined, true);
       postMessage({ command: 'toast', text: `Exportado: ${path.basename(mdPath)} 📝` });
       try {
         const doc = await vscode.workspace.openTextDocument(mdPath);
-        await vscode.window.showTextDocument(doc, { preview: false, viewColumn: vscode.ViewColumn.Beside });
+        await vscode.window.showTextDocument(doc, { preview: false });
       } catch {
         // ignore
       }
@@ -307,24 +305,24 @@ async function handleExport(cascadeId: string, format: string): Promise<void> {
     if (format === 'json' || format === 'all') {
       const record = buildConversationRecord(cascadeId, title, metadata, messages);
       const jsonStr = formatJson([record]);
-      const jsonPath = writeConversation(jsonStr, title, outputDir, '.json');
+      const jsonPath = writeConversation(jsonStr, title, outputDir, '.json', undefined, true);
       postMessage({ command: 'toast', text: `Exportado: ${path.basename(jsonPath)} ⚙️` });
       try {
         const doc = await vscode.workspace.openTextDocument(jsonPath);
-        await vscode.window.showTextDocument(doc, { preview: false, viewColumn: vscode.ViewColumn.Beside });
+        await vscode.window.showTextDocument(doc, { preview: false });
       } catch {
         // ignore
       }
     }
   } catch (e) {
-    vscode.window.showErrorMessage(`Export failed: ${e}`);
+    postMessage({ command: 'toast', text: `⚠️ Error de exportación: ${e}` });
   }
 }
 
 async function handleExportAll(): Promise<void> {
   const cascadeIds = Object.keys(cachedConversations);
   if (cascadeIds.length === 0) {
-    vscode.window.showWarningMessage('No conversations to export. Try refreshing first.');
+    postMessage({ command: 'toast', text: '⚠️ No hay conversaciones para exportar. Pulsa ↻ primero.' });
     return;
   }
 
@@ -363,11 +361,11 @@ async function handleExportAll(): Promise<void> {
 
             if (exportFormat === 'md' || exportFormat === 'all') {
               const md = formatMarkdown(title, cid, metadata, messages);
-              writeConversation(md, title, outputDir, '.md');
+              writeConversation(md, title, outputDir, '.md', undefined, true);
             }
             if (exportFormat === 'json' || exportFormat === 'all') {
               const record = buildConversationRecord(cid, title, metadata, messages);
-              writeConversation(formatJson([record]), title, outputDir, '.json');
+              writeConversation(formatJson([record]), title, outputDir, '.json', undefined, true);
             }
           }
         } catch {
@@ -376,13 +374,10 @@ async function handleExportAll(): Promise<void> {
         done++;
       }
 
-      const choice = await vscode.window.showInformationMessage(
-        `Exportación finalizada: ${done} conversaciones en ${outputDir}`,
-        'Abrir Carpeta',
-      );
-      if (choice === 'Abrir Carpeta') {
-        vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(outputDir));
-      }
+      postMessage({
+        command: 'toast',
+        text: `📦 Exportación finalizada: ${done} conversaciones en ${path.basename(outputDir)} ✅`,
+      });
     },
   );
 }
@@ -399,7 +394,6 @@ async function handleRescueOrphans(targetWebview?: vscode.Webview): Promise<void
     cachedConversations = { ...cachedConversations, ...discovery.conversations };
 
     if (discovery.endpoints.length === 0) {
-      vscode.window.showWarningMessage('No se detectó ningún Language Server de Antigravity activo.');
       postMessage({ command: 'toast', text: '⚠️ No hay Language Server activo para rescatar' }, targetWebview);
       return;
     }
@@ -427,11 +421,8 @@ async function handleRescueOrphans(targetWebview?: vscode.Webview): Promise<void
 
     sendConversationsToWebview(targetWebview);
     postMessage({ command: 'recoverDone', activated: recovery.activated, total: recovery.total }, targetWebview);
-    postMessage({ command: 'toast', text: `🛟 Rescate finalizado: ${recovery.activated} conversaciones reactivadas ✅` }, targetWebview);
-
-    vscode.window.showInformationMessage(`Rescate completado: ${recovery.activated} de ${recovery.total} conversaciones reactivadas en Antigravity.`);
+    postMessage({ command: 'toast', text: `🛟 Rescate finalizado: ${recovery.activated} de ${recovery.total} reactivadas ✅` }, targetWebview);
   } catch (e) {
-    vscode.window.showErrorMessage(`Error en rescate de huérfanos: ${e}`);
     postMessage({ command: 'error', text: `Rescate falló: ${e}` }, targetWebview);
   }
 }
@@ -439,7 +430,7 @@ async function handleRescueOrphans(targetWebview?: vscode.Webview): Promise<void
 async function handleActivateWorkspaceInAgent(): Promise<void> {
   const ws = vscode.workspace.workspaceFolders?.[0];
   if (!ws) {
-    vscode.window.showWarningMessage('No hay ninguna carpeta de workspace abierta en este momento.');
+    postMessage({ command: 'toast', text: '⚠️ No hay carpeta de workspace abierta' });
     return;
   }
 
@@ -627,20 +618,9 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
 
   if (isDifferentWs && targetFolder) {
     const folderName = path.basename(targetFolder);
-    postMessage({ command: 'toast', text: `Chat reactivado ⚠️ Pertenece a "${folderName}"` });
-    vscode.window.showWarningMessage(
-      `Este chat pertenece al workspace "${folderName}" (${targetFolder}). El Agente de Antigravity solo lista en "Recientes" los chats de la carpeta abierta actualmente. ¿Deseas abrir esa carpeta?`,
-      'Abrir en Nueva Ventana',
-      'Abrir en Esta Ventana',
-    ).then((choice) => {
-      if (choice === 'Abrir en Nueva Ventana') {
-        vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(targetFolder), true);
-      } else if (choice === 'Abrir en Esta Ventana') {
-        vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(targetFolder), false);
-      }
-    });
+    postMessage({ command: 'toast', text: `⚠️ Chat reactivado. Pertenece al proyecto "${folderName}"` });
   } else {
-    postMessage({ command: 'toast', text: `Chat en la cima de Recientes ✅ Haz clic en él en el panel del Agente` });
+    postMessage({ command: 'toast', text: 'Chat reactivado en memoria ✅ Ábrelo con Ctrl+Y o en el Agente' });
   }
 }
 

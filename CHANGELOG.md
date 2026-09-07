@@ -4,6 +4,16 @@ All notable changes to the **Antigravity Webview History & Resume** extension wi
 
 ---
 
+## [0.3.7] - 2026-09-06
+
+### Fixed
+- 🚫 **Eliminación Total de Notificaciones Nativas de VS Code**: Se suprimieron todas las llamadas a `vscode.window.showInformationMessage`, `showWarningMessage` y `showErrorMessage`. Toda la interacción (copia de IDs, exportación, alertas de workspace y avisos de rescate) se comunica de forma centralizada a través de la cápsula flotante azul (`.toast`) interna del Webview.
+- 📑 **Apertura de Documentos en Pestañas Horizontales (sin divisiones)**: Los archivos exportados (`MD` y `JSON`) ahora se abren en el grupo de pestañas activo del editor como pestañas contiguas normales, eliminando la creación involuntaria de columnas divididas (`ViewColumn.Beside`).
+- ♻️ **Sobreescritura Canónica sin Duplicados**: Al pulsar repetidamente `[MD]` o `[JSON]`, la extensión actualiza el archivo canónico de la conversación sin saturar el explorador con sufijos numéricos redundantes (`_2.md`, `_3.md`, `..._9.md`).
+- 🎯 **Aclaración y Flujo de Reanudación Realista**: Mensajería transparente en el toast orientada a la selección rápida con `Ctrl + Y` / `openConversationHistory` o en el panel del Agente.
+
+---
+
 ## [0.3.6] - 2026-09-06
 
 ### Added

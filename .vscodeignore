@@ -7,3 +7,6 @@ tsconfig.json
 esbuild.js
 **/*.ts
 **/*.map
+antigravity_export/**
+*.vsix
+
