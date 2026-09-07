@@ -464,14 +464,18 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
   // 6. Verificar correspondencia de workspace
   const conv = cachedConversations[cascadeId];
   const convWsUri = conv?.workspaces?.[0]?.workspaceFolderAbsoluteUri;
-  const currentWsUris = (vscode.workspace.workspaceFolders || []).map((f) => f.uri.toString());
+  const currentFolders = (vscode.workspace.workspaceFolders || []).map((f) => path.resolve(f.uri.fsPath).toLowerCase());
 
   let isDifferentWs = false;
   let targetFolder = '';
   if (convWsUri) {
-    const normalizedConv = convWsUri.toLowerCase().replace(/\/$/, '');
-    isDifferentWs = !currentWsUris.some((u) => u.toLowerCase().replace(/\/$/, '') === normalizedConv);
-    targetFolder = decodeURIComponent(convWsUri.replace(/^file:\/\/\//i, ''));
+    try {
+      targetFolder = vscode.Uri.parse(convWsUri).fsPath;
+    } catch {
+      targetFolder = decodeURIComponent(convWsUri.replace(/^file:\/\/\//i, ''));
+    }
+    const normalizedTarget = path.resolve(targetFolder).toLowerCase();
+    isDifferentWs = currentFolders.length > 0 && !currentFolders.some((f) => f === normalizedTarget);
   }
 
   if (isDifferentWs && targetFolder) {

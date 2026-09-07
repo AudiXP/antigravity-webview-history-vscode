@@ -4,6 +4,13 @@ All notable changes to the **Antigravity Webview History & Resume** extension wi
 
 ---
 
+## [0.3.3] - 2026-09-06
+
+### Fixed
+- 🐛 **Normalización de Rutas en Windows**: Corregida la comparación de URIs entre `file:///c%3A/` y `file:///c:/` usando `fsPath` y `path.resolve` para evitar falsas alertas de workspace cruzado.
+
+---
+
 ## [0.3.2] - 2026-09-06
 
 ### Added
