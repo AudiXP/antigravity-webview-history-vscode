@@ -8,7 +8,6 @@
   const searchInput = document.getElementById('search-input');
   const searchClearBtn = document.getElementById('search-clear');
   const rescueBtn = document.getElementById('btn-rescue');
-  const activateWsBtn = document.getElementById('btn-activate-ws');
   const refreshBtn = document.getElementById('btn-refresh');
   const exportAllBtn = document.getElementById('btn-export-all');
   const statsBar = document.getElementById('stats-bar');
@@ -38,13 +37,6 @@
       rescueBtn.disabled = true;
       rescueBtn.textContent = '🛟 Rescatando...';
       vscode.postMessage({ command: 'rescueOrphans' });
-    });
-  }
-
-  if (activateWsBtn) {
-    activateWsBtn.addEventListener('click', () => {
-      vscode.postMessage({ command: 'activateWorkspaceInAgent' });
-      showToast('Cargando conversaciones en el panel del Agente...');
     });
   }
 

@@ -4,6 +4,17 @@ All notable changes to the **Antigravity Webview History & Resume** extension wi
 
 ---
 
+## [0.3.6] - 2026-09-06
+
+### Added
+- 🚀 **Prioridad Inmediata en Agente (`UpdateConversationAnnotations`)**: Al hacer clic en `▶ Reanudar`, se actualiza `lastUserViewTime` en el Language Server en tiempo real, garantizando que el chat reanudado salte automáticamente al puesto #1 dentro de los 3 cupos visibles en el pie del panel del Agente nativo.
+- 🎨 **Mensaje Flotante en Azul VS Code**: El mensaje emergente (*toast*) superior ahora adopta un fondo azul distintivo (`#0e639c`) con borde (`#3794ff`) y tipografía blanca, mejorando el contraste visual.
+
+### Changed
+- 🧹 **Barra de Herramientas Simplificada**: Eliminado el botón innecesario `⚡ Cargar en Agente`; la activación y actualización se gestionan ahora de forma completamente automática y transparente al reanudar cualquier chat.
+
+---
+
 ## [0.3.5] - 2026-09-06
 
 ### Added

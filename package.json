@@ -2,7 +2,7 @@
   "name": "antigravity-webview-history-vscode",
   "displayName": "Antigravity History & Resume — AI Conversation Manager",
   "description": "Browse, search, resume, and export your Antigravity AI conversations. Resume past chats with 1-click and export with full fidelity.",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "publisher": "AudiXP",
   "author": "AudiXP",
   "license": "Apache-2.0",

@@ -114,9 +114,10 @@ function setupWebviewMessageHandler(webview: vscode.Webview, subscriptions: vsco
           break;
         case 'openInExplorer': {
           let folderPath: string = message.path || '';
-          folderPath = decodeURIComponent(folderPath.replace(/^file:\/\/\//i, ''));
+          folderPath = decodeURIComponent(folderPath.replace(/^file:\/\/\/?/i, ''));
           if (folderPath) {
-            vscode.env.openExternal(vscode.Uri.file(folderPath));
+            // Abrir directamente en el Explorador de Archivos de Windows (o del sistema operativo)
+            vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(folderPath));
           }
           break;
         }
@@ -137,7 +138,8 @@ function setupWebviewMessageHandler(webview: vscode.Webview, subscriptions: vsco
         case 'openExportFolder': {
           const config = vscode.workspace.getConfiguration('aghistory');
           const ep = resolveExportPath(config.get<string>('exportPath', './antigravity_export'));
-          vscode.env.openExternal(vscode.Uri.file(ep));
+          // Abrir directamente en el Explorador de Archivos de Windows
+          vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(ep));
           break;
         }
       }
@@ -294,13 +296,25 @@ async function handleExport(cascadeId: string, format: string): Promise<void> {
     if (format === 'md' || format === 'all') {
       const md = formatMarkdown(title, cascadeId, metadata, messages);
       const mdPath = writeConversation(md, title, outputDir, '.md');
-      postMessage({ command: 'exportDone', text: `Exported: ${path.basename(mdPath)}` });
+      postMessage({ command: 'toast', text: `Exportado: ${path.basename(mdPath)} 📝` });
+      try {
+        const doc = await vscode.workspace.openTextDocument(mdPath);
+        await vscode.window.showTextDocument(doc, { preview: false, viewColumn: vscode.ViewColumn.Beside });
+      } catch {
+        // ignore
+      }
     }
     if (format === 'json' || format === 'all') {
       const record = buildConversationRecord(cascadeId, title, metadata, messages);
       const jsonStr = formatJson([record]);
       const jsonPath = writeConversation(jsonStr, title, outputDir, '.json');
-      postMessage({ command: 'exportDone', text: `Exported: ${path.basename(jsonPath)}` });
+      postMessage({ command: 'toast', text: `Exportado: ${path.basename(jsonPath)} ⚙️` });
+      try {
+        const doc = await vscode.workspace.openTextDocument(jsonPath);
+        await vscode.window.showTextDocument(doc, { preview: false, viewColumn: vscode.ViewColumn.Beside });
+      } catch {
+        // ignore
+      }
     }
   } catch (e) {
     vscode.window.showErrorMessage(`Export failed: ${e}`);
@@ -323,7 +337,7 @@ async function handleExportAll(): Promise<void> {
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: 'Exporting conversations',
+      title: 'Exportando conversaciones',
       cancellable: true,
     },
     async (progress, token) => {
@@ -339,7 +353,23 @@ async function handleExportAll(): Promise<void> {
         });
 
         try {
-          await handleExport(cid, exportFormat);
+          const ep = cachedEndpointMap[cid] || Object.values(cachedEndpointMap)[0];
+          if (ep) {
+            const steps = await getTrajectorySteps(ep.port, ep.csrf, cid);
+            const messages = parseSteps(steps, fieldLevel);
+            const cached = cachedConversations[cid];
+            const title = cached?.summary || `conversation_${cid.slice(0, 8)}`;
+            const metadata: TrajectorySummary = cached || { stepCount: steps.length };
+
+            if (exportFormat === 'md' || exportFormat === 'all') {
+              const md = formatMarkdown(title, cid, metadata, messages);
+              writeConversation(md, title, outputDir, '.md');
+            }
+            if (exportFormat === 'json' || exportFormat === 'all') {
+              const record = buildConversationRecord(cid, title, metadata, messages);
+              writeConversation(formatJson([record]), title, outputDir, '.json');
+            }
+          }
         } catch {
           // Skip failed exports silently
         }
@@ -347,11 +377,11 @@ async function handleExportAll(): Promise<void> {
       }
 
       const choice = await vscode.window.showInformationMessage(
-        `Exported ${done} conversations to ${outputDir}`,
-        'Open Folder',
+        `Exportación finalizada: ${done} conversaciones en ${outputDir}`,
+        'Abrir Carpeta',
       );
-      if (choice === 'Open Folder') {
-        vscode.env.openExternal(vscode.Uri.file(outputDir));
+      if (choice === 'Abrir Carpeta') {
+        vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(outputDir));
       }
     },
   );
@@ -510,12 +540,21 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
     allEndpoints.push(cachedEndpointMap[cascadeId]);
   }
 
-  // 3. Hot-activation: forzar a TODOS los Language Servers activos a cargar el chat en memoria
+  // 3. Hot-activation: forzar a TODOS los Language Servers activos a cargar el chat en memoria y actualizar su última visualización
+  const nowIso = new Date().toISOString();
   await Promise.all(
     allEndpoints.map(async (ep) => {
       try {
         await getTrajectorySteps(ep.port, ep.csrf, cascadeId, 1);
         await callApi(ep.port, ep.csrf, 'LoadTrajectory', { cascadeId }, 2000).catch(() => {});
+        // Actualizar lastUserViewTime para posicionar este chat en el puesto #1 del Agent View
+        await callApi(ep.port, ep.csrf, 'UpdateConversationAnnotations', {
+          cascadeId,
+          mergeAnnotations: true,
+          annotations: {
+            lastUserViewTime: nowIso,
+          },
+        }, 2000).catch(() => {});
       } catch (e) {
         console.warn(`Hot-activation error on port ${ep.port}:`, e);
       }
@@ -674,7 +713,6 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
       </div>
       <div class="toolbar-right">
         <button class="btn btn-rescue" id="btn-rescue" title="Escanear y sincronizar bases de datos huérfanas en disco">🛟 Rescatar</button>
-        <button class="btn btn-activate-ws" id="btn-activate-ws" title="Cargar y calentar conversaciones de esta carpeta en el Agente">⚡ Cargar en Agente</button>
         <button class="btn btn-icon" id="btn-refresh" title="Actualizar">↻</button>
         <button class="btn btn-primary" id="btn-export-all" title="Exportar todas las conversaciones">📦 Exportar Todo</button>
       </div>
