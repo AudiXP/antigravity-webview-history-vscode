@@ -27,6 +27,7 @@ let currentSidebarView: vscode.WebviewView | undefined;
 let cachedEndpointMap: Record<string, { port: number; csrf: string }> = {};
 let cachedConversations: Record<string, TrajectorySummary> = {};
 let cachedArchivedIds: Set<string> = readArchivedIds();
+let liveServerCids: Set<string> = new Set<string>();
 
 export function openPanel(context: vscode.ExtensionContext): void {
   if (currentPanel) {
@@ -186,7 +187,7 @@ function sendConversationsToWebview(targetWebview?: vscode.Webview): void {
   const activeWorkspace = ws ? path.resolve(ws.uri.fsPath).toLowerCase() : '';
   const activeWorkspaceName = ws ? ws.name : '';
 
-  // Detectar conversaciones vaciadas en SQLite dentro del IDE (~48KB / 0 steps)
+  // Detectar conversaciones vaciadas o ausentes de la memoria del Agente en el IDE
   const ideDir = path.join(os.homedir(), '.gemini', 'antigravity-ide', 'conversations');
   const globalDir = path.join(os.homedir(), '.gemini', 'antigravity', 'conversations');
   const wipedInIdeIds: string[] = [];
@@ -195,16 +196,21 @@ function sendConversationsToWebview(targetWebview?: vscode.Webview): void {
     const ideFile = path.join(ideDir, `${cid}.db`);
     const globalFile = path.join(globalDir, `${cid}.db`);
 
+    // 1. Si el servidor de lenguaje está activo pero este chat NO está en sus trayectorias activas
+    if (liveServerCids.size > 0 && !liveServerCids.has(cid)) {
+      wipedInIdeIds.push(cid);
+      continue;
+    }
+
+    // 2. Si el archivo en el IDE está vaciado (~48KB) o no existe, pero hay respaldo global
     try {
       if (fs.existsSync(globalFile)) {
         const globalStat = fs.statSync(globalFile);
-        // Si el respaldo global tiene datos reales (> 60KB)
         if (globalStat.size > 60000) {
           if (!fs.existsSync(ideFile)) {
             wipedInIdeIds.push(cid);
           } else {
             const ideStat = fs.statSync(ideFile);
-            // Si el archivo en el IDE está vaciado (~48KB) o es significativamente menor
             if (ideStat.size <= 50000 || ideStat.size < globalStat.size * 0.5) {
               wipedInIdeIds.push(cid);
             }
@@ -238,6 +244,7 @@ async function handleRefresh(targetWebview?: vscode.Webview): Promise<void> {
 
     // Step 1: Discover LS instances and get indexed conversations
     const result = await discoverAndListAll();
+    liveServerCids = new Set(Object.keys(result.conversations || {}));
     cachedEndpointMap = result.cascadeToEndpoint;
     cachedConversations = { ...cachedConversations, ...result.conversations };
 
@@ -264,6 +271,7 @@ async function handleRefresh(targetWebview?: vscode.Webview): Promise<void> {
       // Step 3: If we recovered anything, re-fetch the full list
       if (recovery.activated > 0) {
         const refreshed = await discoverAndListAll();
+        liveServerCids = new Set(Object.keys(refreshed.conversations || {}));
         cachedEndpointMap = refreshed.cascadeToEndpoint;
         cachedConversations = { ...cachedConversations, ...refreshed.conversations };
         sendConversationsToWebview(targetWebview);
@@ -604,7 +612,11 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
     }),
   );
 
-  // 5. Copiar el TÍTULO EXACTO al portapapeles para filtrado 100% preciso en el reloj (Ctrl+V)
+  // 5. Quitar de la lista de wiped si fue activada y actualizar UI
+  liveServerCids.add(cascadeId);
+  sendConversationsToWebview();
+
+  // 6. Copiar el TÍTULO EXACTO al portapapeles para filtrado 100% preciso en el reloj (Ctrl+V)
   try {
     await vscode.env.clipboard.writeText(chatTitle);
   } catch {
