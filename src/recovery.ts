@@ -143,8 +143,10 @@ export async function recoverUnindexed(
     return { activated: 0, failed: 0, total: 0 };
   }
 
-  // Pre-sync all conversation files across directories
-  syncAllConversations(convDirs);
+  // Pre-sync all conversation files across directories only on explicit rescue (forceAll)
+  if (forceAll) {
+    syncAllConversations(convDirs);
+  }
 
   const allDiskIds = scanDiskFiles(convDirs);
   const targets = forceAll ? allDiskIds : allDiskIds.filter((id) => !indexedIds.has(id));

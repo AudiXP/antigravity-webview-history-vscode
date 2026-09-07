@@ -4,6 +4,23 @@ All notable changes to the **Antigravity Webview History & Resume** extension wi
 
 ---
 
+## [0.3.12] - 2026-09-07
+
+### Fixed
+- ⚠️ **Aislamiento de Language Server para Detección de "Borrada en IDE"**: Separación estricta entre el Language Server del IDE (`--subclient_type ide`) y el del Hub/Standalone (`--subclient_type hub`). Evita que conversaciones activas en el Hub enmascaren el estado de chats borrados o ausentes en el IDE.
+- 📁 **Filtro Contextual por Workspace en Memoria**: Si un Language Server del IDE está activo, solo se marcan como ausentes de memoria aquellos chats pertenecientes al workspace actual (`matchesWorkspaceUri`), previniendo falsos positivos de otros proyectos.
+- 🛑 **Supresión de Sobrescritura Automática Silenciosa en Disco**: `syncAllConversations()` ya no se ejecuta de forma automática en cada refresco de fondo (`recoverUnindexed`), permitiendo preservar los archivos `.db` vaciados por el IDE para su detección visual. La restitución física completa se dispara exclusivamente al pulsar **▶ Reanudar** o en rescates forzados.
+- 📝 **Documentación de Causa Raíz**: Incorporado el documento `docs/diagnostico_borrada_en_ide.md` detallando los 3 factores técnicos que ocasionaban la ausencia de la insignia.
+
+---
+
+## [0.3.11] - 2026-09-07
+
+### Fixed
+- 🔧 **Infraestructura de Detección por Servidor**: Adición preliminar de `ideServerCids` y verificación de parámetros del Language Server.
+
+---
+
 ## [0.3.10] - 2026-09-06
 
 ### Added

@@ -28,6 +28,7 @@ let cachedEndpointMap: Record<string, { port: number; csrf: string }> = {};
 let cachedConversations: Record<string, TrajectorySummary> = {};
 let cachedArchivedIds: Set<string> = readArchivedIds();
 let liveServerCids: Set<string> = new Set<string>();
+let hasActiveIdeServer = false;
 
 export function openPanel(context: vscode.ExtensionContext): void {
   if (currentPanel) {
@@ -182,6 +183,33 @@ export function rescueOrphansPanel(): void {
 
 // ── Handlers ──
 
+function matchesWorkspaceUri(info: TrajectorySummary, targetWs: string): boolean {
+  if (!targetWs) { return false; }
+  const normTarget = targetWs.toLowerCase().replace(/\\/g, '/');
+
+  const wsList = [
+    ...(info.workspaces || []),
+    ...(info.trajectoryMetadata?.workspaces || []),
+  ].map((w) => w.workspaceFolderAbsoluteUri || w.gitRootAbsoluteUri).filter(Boolean);
+
+  if (wsList.some((uri) => {
+    const clean = decodeURIComponent((uri || '').replace(/^file:\/\/\/?/i, '')).toLowerCase().replace(/\\/g, '/');
+    return clean && (normTarget.includes(clean) || clean.includes(normTarget));
+  })) {
+    return true;
+  }
+
+  const uriList = (info.trajectoryMetadata?.workspaceUris as string[]) || [];
+  if (uriList.some((uri: string) => {
+    const clean = decodeURIComponent((uri || '').replace(/^file:\/\/\/?/i, '')).toLowerCase().replace(/\\/g, '/');
+    return clean && (normTarget.includes(clean) || clean.includes(normTarget));
+  })) {
+    return true;
+  }
+
+  return false;
+}
+
 function sendConversationsToWebview(targetWebview?: vscode.Webview): void {
   const ws = vscode.workspace.workspaceFolders?.[0];
   const activeWorkspace = ws ? path.resolve(ws.uri.fsPath).toLowerCase() : '';
@@ -192,14 +220,16 @@ function sendConversationsToWebview(targetWebview?: vscode.Webview): void {
   const globalDir = path.join(os.homedir(), '.gemini', 'antigravity', 'conversations');
   const wipedInIdeIds: string[] = [];
 
-  for (const cid of Object.keys(cachedConversations)) {
+  for (const [cid, info] of Object.entries(cachedConversations)) {
     const ideFile = path.join(ideDir, `${cid}.db`);
     const globalFile = path.join(globalDir, `${cid}.db`);
 
-    // 1. Si el servidor de lenguaje está activo pero este chat NO está en sus trayectorias activas
-    if (liveServerCids.size > 0 && !liveServerCids.has(cid)) {
-      wipedInIdeIds.push(cid);
-      continue;
+    // 1. Si el servidor de lenguaje del IDE está activo pero este chat del workspace NO está en sus trayectorias activas
+    if (hasActiveIdeServer && !liveServerCids.has(cid)) {
+      if (matchesWorkspaceUri(info, activeWorkspace)) {
+        wipedInIdeIds.push(cid);
+        continue;
+      }
     }
 
     // 2. Si el archivo en el IDE está vaciado (~48KB) o no existe, pero hay respaldo global
@@ -244,7 +274,8 @@ async function handleRefresh(targetWebview?: vscode.Webview): Promise<void> {
 
     // Step 1: Discover LS instances and get indexed conversations
     const result = await discoverAndListAll();
-    liveServerCids = new Set(Object.keys(result.conversations || {}));
+    liveServerCids = result.ideServerCids;
+    hasActiveIdeServer = result.hasIdeServer;
     cachedEndpointMap = result.cascadeToEndpoint;
     cachedConversations = { ...cachedConversations, ...result.conversations };
 
@@ -271,7 +302,8 @@ async function handleRefresh(targetWebview?: vscode.Webview): Promise<void> {
       // Step 3: If we recovered anything, re-fetch the full list
       if (recovery.activated > 0) {
         const refreshed = await discoverAndListAll();
-        liveServerCids = new Set(Object.keys(refreshed.conversations || {}));
+        liveServerCids = refreshed.ideServerCids;
+        hasActiveIdeServer = refreshed.hasIdeServer;
         cachedEndpointMap = refreshed.cascadeToEndpoint;
         cachedConversations = { ...cachedConversations, ...refreshed.conversations };
         sendConversationsToWebview(targetWebview);
@@ -576,6 +608,8 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
   let allEndpoints: Array<{ port: number; csrf: string }> = [];
   try {
     const refreshed = await discoverAndListAll();
+    liveServerCids = refreshed.ideServerCids;
+    hasActiveIdeServer = refreshed.hasIdeServer;
     cachedEndpointMap = refreshed.cascadeToEndpoint;
     cachedConversations = { ...cachedConversations, ...refreshed.conversations };
     allEndpoints = refreshed.endpoints;

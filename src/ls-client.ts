@@ -119,12 +119,16 @@ export async function discoverAndListAll(): Promise<{
   conversations: Record<string, TrajectorySummary>;
   cascadeToEndpoint: Record<string, { port: number; csrf: string }>;
   endpoints: LsEndpoint[];
+  ideServerCids: Set<string>;
+  hasIdeServer: boolean;
 }> {
   const servers = discoverLanguageServers();
   const conversations: Record<string, TrajectorySummary> = {};
   const cascadeToEndpoint: Record<string, { port: number; csrf: string }> = {};
   const endpoints: LsEndpoint[] = [];
+  const ideServerCids = new Set<string>();
   const seenPorts = new Set<number>();
+  let hasIdeServer = false;
 
   // Build all probe tasks for each process port
   const probeTasks: Array<{ srv: LsProcess; port: number }> = [];
@@ -153,16 +157,47 @@ export async function discoverAndListAll(): Promise<{
         endpoints.push({ port, csrf: srv.csrf, pid: srv.pid });
         seenPids.add(srv.pid);
       }
+
+      // Detectar si este servidor es de tipo IDE (no Hub)
+      const isIdeServer = isIdeLanguageServer(srv.cmd);
+      if (isIdeServer) {
+        hasIdeServer = true;
+      }
+
       for (const [cid, info] of Object.entries(summaries)) {
         if (!(cid in conversations)) {
           conversations[cid] = info;
           cascadeToEndpoint[cid] = { port, csrf: srv.csrf };
         }
+        // Solo registrar CIDs de servidores IDE para detección de borrado
+        if (isIdeServer) {
+          ideServerCids.add(cid);
+        }
       }
     }
   }
 
-  return { conversations, cascadeToEndpoint, endpoints };
+  return { conversations, cascadeToEndpoint, endpoints, ideServerCids, hasIdeServer };
+}
+
+/**
+ * Determina si un proceso Language Server es de tipo IDE (no Hub).
+ * Los servidores IDE usan --subclient_type ide o --app_data_dir con antigravity-ide.
+ * El Hub usa --subclient_type hub o --app_data_dir sin "ide".
+ */
+function isIdeLanguageServer(cmdLine: string): boolean {
+  // Comprobar subclient_type explícito
+  const subclientMatch = cmdLine.match(/--subclient_type\s+(\S+)/);
+  if (subclientMatch) {
+    return subclientMatch[1] === 'ide';
+  }
+  // Comprobar app_data_dir contiene "antigravity-ide"
+  const appDataMatch = cmdLine.match(/--app_data_dir\s+(\S+)/);
+  if (appDataMatch) {
+    return appDataMatch[1].includes('antigravity-ide');
+  }
+  // Sin marcadores → asumir que NO es IDE (por defecto es Hub/standalone)
+  return false;
 }
 
 /**
