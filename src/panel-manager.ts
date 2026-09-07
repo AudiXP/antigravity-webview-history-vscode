@@ -116,6 +116,12 @@ function setupWebviewMessageHandler(webview: vscode.Webview, subscriptions: vsco
             postMessage({ command: 'toast', text: '📋 ID copiado al portapapeles' });
           }
           break;
+        case 'copyTitle':
+          if (message.title) {
+            await vscode.env.clipboard.writeText(message.title);
+            postMessage({ command: 'toast', text: '📋 Título copiado al portapapeles' });
+          }
+          break;
         case 'openInExplorer': {
           let folderPath: string = message.path || '';
           folderPath = decodeURIComponent(folderPath.replace(/^file:\/\/\/?/i, ''));
@@ -180,6 +186,36 @@ function sendConversationsToWebview(targetWebview?: vscode.Webview): void {
   const activeWorkspace = ws ? path.resolve(ws.uri.fsPath).toLowerCase() : '';
   const activeWorkspaceName = ws ? ws.name : '';
 
+  // Detectar conversaciones vaciadas en SQLite dentro del IDE (~48KB / 0 steps)
+  const ideDir = path.join(os.homedir(), '.gemini', 'antigravity-ide', 'conversations');
+  const globalDir = path.join(os.homedir(), '.gemini', 'antigravity', 'conversations');
+  const wipedInIdeIds: string[] = [];
+
+  for (const cid of Object.keys(cachedConversations)) {
+    const ideFile = path.join(ideDir, `${cid}.db`);
+    const globalFile = path.join(globalDir, `${cid}.db`);
+
+    try {
+      if (fs.existsSync(globalFile)) {
+        const globalStat = fs.statSync(globalFile);
+        // Si el respaldo global tiene datos reales (> 60KB)
+        if (globalStat.size > 60000) {
+          if (!fs.existsSync(ideFile)) {
+            wipedInIdeIds.push(cid);
+          } else {
+            const ideStat = fs.statSync(ideFile);
+            // Si el archivo en el IDE está vaciado (~48KB) o es significativamente menor
+            if (ideStat.size <= 50000 || ideStat.size < globalStat.size * 0.5) {
+              wipedInIdeIds.push(cid);
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   postMessage({
     command: 'setConversations',
     data: cachedConversations,
@@ -187,6 +223,7 @@ function sendConversationsToWebview(targetWebview?: vscode.Webview): void {
     activeWorkspace,
     activeWorkspaceName,
     archivedIds: Array.from(cachedArchivedIds),
+    wipedInIdeIds,
   }, targetWebview);
 }
 
@@ -610,9 +647,9 @@ async function handleResumeChat(cascadeId: string): Promise<void> {
 
   if (isDifferentWs && targetFolder) {
     const folderName = path.basename(targetFolder);
-    postMessage({ command: 'toast', text: `Título copiado 📋 Pertenece al proyecto "${folderName}"` });
+    postMessage({ command: 'toast', text: `Título copiado 📋 Pulsa en el reloj del Agente y pega con Ctrl+V (Proyecto: "${folderName}")` });
   } else {
-    postMessage({ command: 'toast', text: `Título copiado 📋 Pégalo con Ctrl+V en el reloj del Agente ✅` });
+    postMessage({ command: 'toast', text: `Título copiado 📋 Pulsa en el reloj (Historial) del Agente y pega con Ctrl+V ✅` });
   }
 }
 

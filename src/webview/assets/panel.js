@@ -29,6 +29,7 @@
   let groupMode = 'current-ws'; // Default to current-ws!
   let collapsedGroups = new Set();
   let archivedIds = new Set();
+  let wipedInIdeIds = new Set();
   let convDataDir = '';
   let currentWorkspace = '';
   let currentWorkspaceName = '';
@@ -92,10 +93,8 @@
   // Segmented control navigation
   function setGroupMode(mode) {
     groupMode = mode;
-    const allBtns = [groupCurrentWsBtn, groupRecentBtn, groupDateBtn, groupWorkspaceBtn, groupArchivedBtn];
-    allBtns.forEach((btn) => {
-      if (!btn) return;
-      btn.classList.remove('active');
+    [groupCurrentWsBtn, groupRecentBtn, groupDateBtn, groupWorkspaceBtn, groupArchivedBtn].forEach((b) => {
+      if (b) b.classList.remove('active');
     });
 
     if (mode === 'current-ws' && groupCurrentWsBtn) groupCurrentWsBtn.classList.add('active');
@@ -148,6 +147,7 @@
           if (msg.activeWorkspace !== undefined) { currentWorkspace = msg.activeWorkspace; }
           if (msg.activeWorkspaceName !== undefined) { currentWorkspaceName = msg.activeWorkspaceName; }
           if (msg.archivedIds) { archivedIds = new Set(msg.archivedIds); }
+          if (msg.wipedInIdeIds) { wipedInIdeIds = new Set(msg.wipedInIdeIds); }
           if (rescueBtn) {
             rescueBtn.disabled = false;
             rescueBtn.textContent = '🛟 Rescatar';
@@ -351,13 +351,24 @@
       ? `<span class="conv-meta-item conv-id-badge" data-action="copyId" data-id="${esc(cascadeId)}" title="Copiar ID: ${esc(cascadeId)}">🪪 ${esc(cascadeId.slice(0, 8))}</span>`
       : '';
 
+    const isWipedInIde = wipedInIdeIds.has(cascadeId);
+    const wipedBadgeHtml = isWipedInIde
+      ? `<span class="conv-wiped-badge" title="Borrada del historial local del IDE. Pulsa ▶ Reanudar para restituirla íntegramente desde el respaldo.">⚠️ Borrada en IDE</span>`
+      : '';
+
     return `
-      <div class="conv-card${isArchived ? ' archived' : ''}" data-cascade-id="${esc(cascadeId)}">
+      <div class="conv-card${isArchived ? ' archived' : ''}${isWipedInIde ? ' wiped-in-ide' : ''}" data-cascade-id="${esc(cascadeId)}">
         <div class="conv-icon">${statusDot}</div>
         <div class="conv-body">
           <div class="conv-header-row">
-            <div class="conv-title" title="${esc(title)}">${esc(title)}</div>
-            <span class="conv-steps-badge">${stepCount} pasos</span>
+            <div class="conv-title-wrapper">
+              <button class="btn-copy-title" data-action="copyTitle" data-title="${esc(title)}" title="Copiar título al portapapeles">📋</button>
+              <div class="conv-title" title="${esc(title)}">${esc(title)}</div>
+            </div>
+            <div class="conv-header-badges">
+              ${wipedBadgeHtml}
+              <span class="conv-steps-badge">${stepCount} pasos</span>
+            </div>
           </div>
           <div class="conv-actions-row">
             <button class="btn-action btn-resume" data-action="resumeChat" data-id="${esc(cascadeId)}" title="Reanudar en el Agente de Antigravity">▶ Reanudar</button>
@@ -396,6 +407,12 @@
         } else if (action === 'copyId') {
           vscode.postMessage({ command: 'copyId', cascadeId });
           showToast('Copied!');
+        } else if (action === 'copyTitle') {
+          const chatTitle = btn.getAttribute('data-title');
+          if (chatTitle) {
+            vscode.postMessage({ command: 'copyTitle', title: chatTitle });
+            showToast('📋 Título copiado al portapapeles');
+          }
         } else if (action === 'toggleArchive') {
           vscode.postMessage({ command: 'toggleArchive', cascadeId });
         } else if (action === 'openFolder') {

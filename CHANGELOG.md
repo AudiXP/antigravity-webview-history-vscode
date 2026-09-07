@@ -4,6 +4,15 @@ All notable changes to the **Antigravity Webview History & Resume** extension wi
 
 ---
 
+## [0.3.10] - 2026-09-06
+
+### Added
+- 📋 **Botón de Copia Rápida de Título**: Incorporado un icono interactivo `📋` al lado izquierdo de cada título de conversación (`conv-title-wrapper`). Permite copiar con un solo clic el nombre exacto del chat directamente al portapapeles con confirmación visual en el toast.
+- ⚠️ **Detección Visual de Chats Vaciados en SQLite (`⚠️ Borrada en IDE`)**: Identificación automática en tiempo real de bases de datos vaciadas (~48 KB / 0 pasos) por Antigravity IDE que continúan respaldadas en la carpeta global. Muestra una insignia ámbar destacada con tooltip orientativo.
+- 🕒 **Incentivo y Claridad para Past Conversations**: Notificaciones toast optimizadas para guiar al usuario a abrir el historial nativo del reloj en el panel del Agente y pegar con `Ctrl + V`.
+
+---
+
 ## [0.3.9] - 2026-09-06
 
 ### Fixed
